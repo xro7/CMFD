@@ -129,19 +129,28 @@ class Feature_Correlation_Matching(Model):
    
     def call(self,x,training=True):
         predictions = []
+        args_predictions = []
         for feature_map in x:
             b,h,w,c = feature_map.shape
             feature_map = tf.reshape(feature_map,(b,-1,c))
             norms = []
+            args = []
             for i in range(h*w):
                 norm = tf.norm(feature_map-feature_map[:,i:i+1,:],ord=2,axis=-1)
                 sorted_tensor = tf.sort(norm,axis=-1)
                 norms.append(sorted_tensor)
+                #arg_tensor = tf.argsort(norm,axis=-1)
+                #arg_tensor = arg_tensor[:,1]
+                #args.append(arg_tensor)
             prediction = tf.stack(norms,axis=1)
-            prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,-1])))
+            #arg_prediction = tf.stack(args,axis=-1)
+            #print(arg_prediction.shape)
+            prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
             prediction = tf.reshape(prediction,(b,h,w))
+            #arg_prediction = tf.reshape(arg_prediction,(b,h,w))
             predictions.append(prediction)
-        return predictions
+            #args_predictions.append(arg_prediction)
+        return predictions#,args_predictions
     
     
 class Hierarchical_Post_Processing(Model):
@@ -162,3 +171,20 @@ class Hierarchical_Post_Processing(Model):
             predictions.append(prediction)
         output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
         return predictions,output
+    
+    
+class CMFD(Model):
+
+    def __init__(self):
+        super(CMFD,self).__init__()
+        # may i need to preprocess inputs
+        self.feature_extractor = Dense_InceptionNet()
+        self.correlation_matching = Feature_Correlation_Matching()
+        self.post_processing = Hierarchical_Post_Processing()
+
+   
+    def call(self,x,training=True):
+        x = self.feature_extractor(x,training=training)
+        x = self.correlation_matching(x)
+        maps,output = self.post_processing(x)
+        return maps,output

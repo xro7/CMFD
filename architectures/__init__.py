@@ -1,1 +1,1 @@
-from .Dense_InceptionNet import Dense_InceptionNet
+from .Dense_InceptionNet import *
