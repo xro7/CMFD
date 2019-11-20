@@ -25,7 +25,7 @@ def main():
     parser.add_argument('--dataset_root', type=str)
     parser.add_argument('--model', type=str, default='dense_inception',help='architecture')
     parser.add_argument('--restore', default=False, action='store_true')
-    parser.add_argument('--save_by_metric', choices=['accuracy','macro-f1'], type=str, default='macro-f1')
+    parser.add_argument('--save_by_metric', choices=['accuracy','macro-f1'], type=str, default='accuracy')
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
@@ -35,7 +35,7 @@ def main():
     parser.add_argument('--checkpoint_path', type=str, default='ckpts/')
 
     
-    #python train.py --experiment=test --dataset_root=/data1/USCISI-CMFD/ --batch_size=16 --gpu_id=2 --learning_rate=1e-3 --epochs=100 --validation_per_epoch=10 --checkpoint_path=/home/charitidis/sync/USCISI-CMFD/ckpts/
+    #python train.py --experiment=test --dataset_root=/data1/USCISI-CMFD/ --batch_size=8 --gpu_id=2 --learning_rate=1e-3 --epochs=100 --validation_per_epoch=1 --checkpoint_path=/home/charitidis/sync/USCISI-CMFD/ckpts/
     args = parser.parse_args()
     print(args)
     
@@ -69,20 +69,20 @@ def main():
     sort=False
     drop_remainder = False
 
-    train_dataset,length = create_dataset(train_images,train_masks,args.batch_size,args.image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
+    train_dataset,length = create_dataset(train_images,train_masks,args.batch_size,image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
     train_dataset_iter = iter(train_dataset)
     train_dataset_size = iterator_sizes(length,batch_size,drop_remainder=drop_remainder)
     print(train_dataset_size)
 
-#     test_dataset,length = create_dataset(test_images,test_masks,args.batch_size,args.image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
+#     test_dataset,length = create_dataset(test_images,test_masks,args.batch_size,image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
 #     test_dataset_iter = iter(test_dataset)
 #     test_dataset_size = iterator_sizes(length,batch_size,drop_remainder=drop_remainder)
 #     print(test_dataset_size)
 
-    valid_dataset,length = create_dataset(valid_images,valid_masks,args.batch_size,args.image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
-    valid_dataset_iter = iter(valid_dataset)
-    valid_dataset_size = iterator_sizes(length,batch_size,drop_remainder=drop_remainder)
-    print(valid_dataset_size)
+    val_dataset,length = create_dataset(valid_images,valid_masks,args.batch_size,image_size,extension='.jpg',drop_remainder=drop_remainder,sort=sort,shuffle=True)
+    val_dataset_iter = iter(val_dataset)
+    val_dataset_size = iterator_sizes(length,batch_size,drop_remainder=drop_remainder)
+    print(val_dataset_size)
     
     if args.model == 'dense_inception':
         architecture = CMFD()

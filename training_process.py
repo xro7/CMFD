@@ -20,7 +20,7 @@ import tensorflow_addons as tfa
 
 def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.keras.metrics.Mean,f1_score=tfa.metrics.F1Score,classes=1,test_threshold=0.5):
     global batch_accuracy,train_macro_f1,test_macro_f1,batch_macro_f1
-    global train_loss,train_accuracy,test_loss,test_accuracy,test_PR_AUC,fake_Precision,real_Precision,real_Recall,fake_Recall
+    global train_loss,train_accuracy,test_loss,test_accuracy,test_PR_AUC,precision,recall,batch_precision,batch_recall
     batch_accuracy = accuracy()
     train_loss = loss_aggregation()
     train_accuracy = accuracy()
@@ -29,7 +29,9 @@ def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.
     batch_macro_f1 = f1_score(num_classes=classes,average='macro')
     train_macro_f1 = f1_score(num_classes=classes,average='macro')
     test_macro_f1 = f1_score(num_classes=classes,average='macro')
-    test_PR_AUC = tf.keras.metrics.AUC(curve='PR')
+    test_PR_AUC = tf.keras.metrics.AUC(curve='ROC')
+    batch_precision = tf.keras.metrics.Precision()
+    batch_recall = tf.keras.metrics.Recall()
     precision = tf.keras.metrics.Precision()
     recall = tf.keras.metrics.Recall()
 
@@ -38,23 +40,24 @@ def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=
     
     batch_accuracy.reset_states()
     batch_macro_f1.reset_states()
+    batch_precision.reset_states()
+    batch_recall.reset_states()
     
     with tf.GradientTape() as tape:
         images, ground_truth = batch
 
         feature_maps,outputs = model(images,training=True,*model_args)
         batch_loss = loss_function(ground_truth,feature_maps)
-        
-#         actuals = tf.reshape(ground_truth,(-1,1))       
-#         preds = tf.reshape(outputs,(-1,1)) 
         batch_accuracy.update_state(ground_truth,outputs)
         train_loss.update_state(batch_loss)
         train_accuracy.update_state(ground_truth,outputs)
+        batch_precision.update_state(ground_truth,outputs)
+        batch_recall.update_state(ground_truth,outputs)
         
-        actuals = tf.reshape(ground_truth,(-1,1))       
-        preds = tf.reshape(outputs,(-1,1)) 
-        batch_macro_f1.update_state(actuals,preds)
-        train_macro_f1.update_state(actuals,preds)
+#         actuals = tf.reshape(ground_truth,(-1,1))       
+#         preds = tf.reshape(outputs,(-1,1)) 
+#         batch_macro_f1.update_state(actuals,preds)
+#         train_macro_f1.update_state(actuals,preds)
 
     gradients = tape.gradient(batch_loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -63,7 +66,17 @@ def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=
         with file_writer.as_default():
             tf.summary.scalar('batch_loss',batch_loss,step=step)
             tf.summary.scalar('batch_accuracy',batch_accuracy.result(),step=step)
-            tf.summary.scalar('batch_macro_f1',batch_macro_f1.result(),step=step)
+            #tf.summary.scalar('batch_macro_f1',batch_macro_f1.result(),step=step)
+            tf.summary.scalar('batch_precision',batch_precision.result(),step=step)
+            tf.summary.scalar('batch_recall',batch_recall.result(),step=step)
+            if step % 500 == 0:
+                for i,maps in enumerate(feature_maps):
+                    tf.summary.image("maps_"+str(i), maps, max_outputs=16, step=step)
+                tf.summary.image("images", images, max_outputs=16, step=step)
+                tf.summary.image("masks", ground_truth, max_outputs=16, step=step)
+                tf.summary.image("predictions", outputs, max_outputs=16, step=step)
+                
+                
     return batch_loss
 
 #@tf.function
@@ -72,25 +85,26 @@ def test_step(model,loss_function,batch,step,*model_args,file_writer=None):
     
     images, ground_truth = batch
     
-    feature_maps,outputs = model(images,training=True,*model_args)
+    feature_maps,outputs = model(images,training=False,*model_args)
     batch_loss = loss_function(ground_truth,feature_maps)
         
     batch_accuracy.update_state(ground_truth,outputs)
     test_loss.update_state(batch_loss)
     test_accuracy.update_state(ground_truth,outputs)
     test_PR_AUC.update_state(ground_truth,outputs)
-    
-    actuals = tf.reshape(ground_truth,(-1,1))       
-    preds = tf.reshape(outputs,(-1,1)) 
-    test_macro_f1.update_state(actuals,preds)
     precision.update_state(actuals,preds)
     recall.update_state(actuals,preds)
+    
+#     actuals = tf.reshape(ground_truth,(-1,1))       
+#     preds = tf.reshape(outputs,(-1,1)) 
+#     test_macro_f1.update_state(actuals,preds)
+
     
     # in case i need to record test steps evaluation 
     if file_writer is not None:
         with file_writer.as_default():
             tf.summary.scalar('batch_loss',batch_loss,step=step)
-            tf.summary.scalar('batch_accuracy',batch_accuracy.result(),step=step)              
+            tf.summary.scalar('batch_accuracy',batch_accuracy.result(),step=step) 
     return batch_loss
 
 @tf.function
@@ -246,7 +260,7 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
                 if (iteration+1) % step_to_validate == 0:
                     print('validation round {}/{} for epoch {} at step {}...'.format(validation_round,validation_per_epoch,epoch,step))
                     test(model,loss_function,step,val_dataset,val_dataset_size,batch_size,*model_args,
-                                                 file_writer=val_file_writer,attention=attention,strategy=strategy,reconstruction=reconstruction)
+                                                 file_writer=val_file_writer,strategy=strategy)
                     #print(val_accuracy)
                     validation_round+=1
                     if current_best_metric<metric_to_inspect.result().numpy():
