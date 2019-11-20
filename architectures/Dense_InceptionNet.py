@@ -133,25 +133,27 @@ class Feature_Correlation_Matching(Model):
         for feature_map in x:
             b,h,w,c = feature_map.shape
             feature_map = tf.reshape(feature_map,(b,-1,c))
-            norms = []
-            args = []
-            for i in range(h*w):
-                norm = tf.norm(feature_map-feature_map[:,i:i+1,:],ord=2,axis=-1)
-                sorted_tensor = tf.sort(norm,axis=-1)
-                norms.append(sorted_tensor)
-                #arg_tensor = tf.argsort(norm,axis=-1)
-                #arg_tensor = arg_tensor[:,1]
-                #args.append(arg_tensor)
-            prediction = tf.stack(norms,axis=1)
-            #arg_prediction = tf.stack(args,axis=-1)
-            #print(arg_prediction.shape)
+            
+            # http://www.robots.ox.ac.uk/~albanie/notes/Euclidean_distance_trick.pdf
+            #numpy
+#             G = np.einsum('bik, bjk->bij', feature_map, feature_map)
+#             D = G.diagonal(axis1=1,axis2=2).reshape(b,-1,1)+ np.transpose(G.diagonal(axis1=1,axis2=2).reshape(b,-1,1),axes=(0,2,1)) - 2*G
+#             prediction = np.sqrt(D)
+#             prediction = np.sort(repredictions,axis=-1)
+
+            G = tf.einsum('bik, bjk->bij', feature_map, feature_map)
+            D = tf.reshape(tf.linalg.diag_part(G),(b,-1,1))+ tf.transpose(tf.reshape(tf.linalg.diag_part(G),(b,-1,1)),perm=(0,2,1)) - 2*G
+            prediction = tf.sqrt(D)
+            prediction = tf.sort(prediction,axis=-1)
+
             prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
             prediction = tf.reshape(prediction,(b,h,w))
-            #arg_prediction = tf.reshape(arg_prediction,(b,h,w))
             predictions.append(prediction)
-            #args_predictions.append(arg_prediction)
-        return predictions#,args_predictions
-    
+            
+            
+            
+
+        return predictions
     
 class Hierarchical_Post_Processing(Model):
 

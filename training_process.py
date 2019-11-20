@@ -18,7 +18,7 @@ import  tensorflow as tf
 from    tensorflow import keras
 import tensorflow_addons as tfa
 
-def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.keras.metrics.Mean,f1_score=tfa.metrics.F1Score,classes=2,test_threshold=0.5):
+def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.keras.metrics.Mean,f1_score=tfa.metrics.F1Score,classes=1,test_threshold=0.5):
     global batch_accuracy,train_macro_f1,test_macro_f1,batch_macro_f1
     global train_loss,train_accuracy,test_loss,test_accuracy,test_PR_AUC,fake_Precision,real_Precision,real_Recall,fake_Recall
     batch_accuracy = accuracy()
@@ -44,7 +44,9 @@ def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=
 
         feature_maps,outputs = model(images,training=True,*model_args)
         batch_loss = loss_function(ground_truth,feature_maps)
-            
+        
+#         actuals = tf.reshape(ground_truth,(-1,1))       
+#         preds = tf.reshape(outputs,(-1,1)) 
         batch_accuracy.update_state(ground_truth,outputs)
         train_loss.update_state(batch_loss)
         train_accuracy.update_state(ground_truth,outputs)
