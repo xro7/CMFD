@@ -26,9 +26,9 @@ def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.
     train_accuracy = accuracy()
     test_loss = loss_aggregation()
     test_accuracy = accuracy(threshold=test_threshold)
-    batch_macro_f1 = f1_score(num_classes=classes,average='macro')
-    train_macro_f1 = f1_score(num_classes=classes,average='macro')
-    test_macro_f1 = f1_score(num_classes=classes,average='macro')
+#     batch_macro_f1 = f1_score(num_classes=classes,average='macro')
+#     train_macro_f1 = f1_score(num_classes=classes,average='macro')
+#     test_macro_f1 = f1_score(num_classes=classes,average='macro')
     test_PR_AUC = tf.keras.metrics.AUC(curve='ROC')
     batch_precision = tf.keras.metrics.Precision()
     batch_recall = tf.keras.metrics.Recall()
@@ -36,17 +36,17 @@ def define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.
     recall = tf.keras.metrics.Recall()
 
 #@tf.function
-def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=None):
-    
+def train_step(model,loss_function,optimizer,batch,step,file_writer=None):
+    #batch = next(iterator)
     batch_accuracy.reset_states()
-    batch_macro_f1.reset_states()
+    #batch_macro_f1.reset_states()
     batch_precision.reset_states()
     batch_recall.reset_states()
     
     with tf.GradientTape() as tape:
         images, ground_truth = batch
 
-        feature_maps,outputs = model(images,training=True,*model_args)
+        feature_maps,outputs = model(images,training=True)
         batch_loss = loss_function(ground_truth,feature_maps)
         batch_accuracy.update_state(ground_truth,outputs)
         train_loss.update_state(batch_loss)
@@ -79,12 +79,12 @@ def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=
     return batch_loss
 
 #@tf.function
-def test_step(model,loss_function,batch,step,*model_args,file_writer=None):
+def test_step(model,loss_function,batch,step,file_writer=None):
     batch_accuracy.reset_states()
     
     images, ground_truth = batch
     
-    feature_maps,outputs = model(images,training=False,*model_args)
+    feature_maps,outputs = model(images,training=False)
     batch_loss = loss_function(ground_truth,feature_maps)
         
     batch_accuracy.update_state(ground_truth,outputs)
@@ -106,18 +106,18 @@ def test_step(model,loss_function,batch,step,*model_args,file_writer=None):
             tf.summary.scalar('batch_accuracy',batch_accuracy.result(),step=step) 
     return batch_loss
 
-@tf.function
-def distributed_train_step(strategy,model,loss_function,optimizer,batch,step,*model_args,file_writer=None):
-    per_replica_loss = strategy.experimental_run_v2(train_step,args=(model,loss_function,optimizer,batch,step,*model_args,),kwargs={'file_writer':file_writer})
+#@tf.function
+def distributed_train_step(strategy,model,loss_function,optimizer,batch,step,file_writer=None):
+    per_replica_loss = strategy.experimental_run_v2(train_step,args=(model,loss_function,optimizer,batch,step),kwargs={'file_writer':file_writer})
     return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
  
-@tf.function
-def distributed_test_step(strategy,model,loss_function,batch,step,*model_args,file_writer=None):
-    per_replica_loss = strategy.experimental_run_v2(test_step, args =(model,loss_function,batch,step,*model_args,),kwargs={'file_writer':file_writer})
+#@tf.function
+def distributed_test_step(strategy,model,loss_function,batch,step,file_writer=None):
+    per_replica_loss = strategy.experimental_run_v2(test_step, args =(model,loss_function,batch,step),kwargs={'file_writer':file_writer})
     return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
 
 #@tf.function
-def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*model_args,file_writer=None,strategy=None):
+def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,file_writer=None,strategy=None):
     test_loss.reset_states()
     test_accuracy.reset_states()
     #test_macro_f1.reset_states()
@@ -134,9 +134,9 @@ def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*mod
             batch = next(test_dataset)      
             images, ground_truth = batch
             if strategy is None:
-                batch_loss_result = test_step(model,loss_function,batch,step,*model_args,file_writer=None)
+                batch_loss_result = test_step(model,loss_function,batch,step,file_writer=None)
             else:
-                batch_loss_result = distributed_test_step(strategy,model,loss_function,batch,step,*model_args,file_writer=None)
+                batch_loss_result = distributed_test_step(strategy,model,loss_function,batch,step,file_writer=None)
             bar.update(1)
             postfix = OrderedDict(loss=f'{batch_loss_result:.4f}', 
                               accuracy=f'{batch_accuracy.result():.4f}')
@@ -188,7 +188,7 @@ def create_checkpoint_and_restore(restore,net,optimizer,choose_ckpt='latest',ckp
                 
                
 # @tf.function
-def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dataset,val_dataset_size,batch_size,epochs,*model_args,max_patience=10,
+def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dataset,val_dataset_size,batch_size,epochs,max_patience=10,
           min_epochs=-1,validation_per_epoch=1,save_by_metric='accuracy',log_dir='logs/',checkpoint_path='ckpts/',restore=False,strategy=None):
     
     timestamp = int(datetime.now().timestamp())
@@ -243,15 +243,15 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
         #reset metrics
         train_loss.reset_states()
         train_accuracy.reset_states()
-        train_macro_f1.reset_states()
+        #train_macro_f1.reset_states()
         bar = tqdm(total=train_dataset_size)
         validation_round = 1
         for iteration in range(train_dataset_size):
             batch = next(train_dataset)
             if strategy is None:
-                loss = train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=train_file_writer)
+                loss = train_step(model,loss_function,optimizer,batch,step,file_writer=train_file_writer)
             else:
-                loss = distributed_train_step(strategy,model,loss_function,optimizer,batch,step,*model_args,file_writer=train_file_writer) 
+                loss = distributed_train_step(strategy,model,loss_function,optimizer,batch,step,file_writer=train_file_writer) 
             step+=1
             bar.update(1)
             postfix = OrderedDict(loss=f'{loss:.4f}', 
@@ -261,8 +261,7 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
             if val_dataset is not None:
                 if (iteration+1) % step_to_validate == 0:
                     print('validation round {}/{} for epoch {} at step {}...'.format(validation_round,validation_per_epoch,epoch,step))
-                    test(model,loss_function,step,val_dataset,val_dataset_size,batch_size,*model_args,
-                                                 file_writer=val_file_writer,strategy=strategy)
+                    test(model,loss_function,step,val_dataset,val_dataset_size,batch_size,file_writer=val_file_writer,strategy=strategy)
                     #print(val_accuracy)
                     validation_round+=1
                     if save_by_metric is not None:
@@ -270,9 +269,9 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
                             current_best_metric=metric_to_inspect.result().numpy()
                             print('current_best_metric',current_best_metric,'metric_to_inspect',metric_to_inspect.result().numpy())
                             best_val_acc = test_accuracy.result().numpy()
-                            best_macro_f1 = test_macro_f1.result().numpy()
+                            #best_macro_f1 = test_macro_f1.result().numpy()
                             ckpt.val_acc.assign(best_val_acc)
-                            ckpt.val_macro_f1.assign(best_macro_f1)
+                            ckpt.val_macro_f1.assign(0.0)
                             ckpt.step.assign(step)
                             ckpt.epoch.assign(epoch)
                             save_path = manager.save(checkpoint_number=step)
@@ -283,7 +282,7 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
                             print('patience level: {}/{}'.format(count_patience,max_patience))
                             if (count_patience>=max_patience) and (epoch>min_epochs):
                                 ckpt.val_acc.assign(test_accuracy.result().numpy())
-                                ckpt.val_macro_f1.assign(test_macro_f1.result().numpy())
+                                ckpt.val_macro_f1.assign(0.0)
                                 ckpt.step.assign(step)
                                 ckpt.epoch.assign(epoch)
                                 save_path = manager.save(checkpoint_number=step)
@@ -300,7 +299,7 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
         with train_file_writer.as_default():
             tf.summary.scalar('loss_per_epoch',train_loss.result(),step=epoch)
             tf.summary.scalar('accuracy_per_epoch',train_accuracy.result(),step=epoch)
-            tf.summary.scalar('macrof1_per_epoch',train_macro_f1.result(),step=epoch)
+            #tf.summary.scalar('macrof1_per_epoch',train_macro_f1.result(),step=epoch)
             #tf.summary.scalar('lr',optimizer.lr(step),step=epoch)# error
             
             

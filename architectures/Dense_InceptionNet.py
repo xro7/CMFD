@@ -137,14 +137,15 @@ class Feature_Correlation_Matching(Model):
             
             # http://www.robots.ox.ac.uk/~albanie/notes/Euclidean_distance_trick.pdf
             #numpy
-#             G = np.einsum('bik, bjk->bij', feature_map, feature_map)
-#             D = G.diagonal(axis1=1,axis2=2).reshape(b,-1,1)+ np.transpose(G.diagonal(axis1=1,axis2=2).reshape(b,-1,1),axes=(0,2,1)) - 2*G
-#             prediction = np.sqrt(D)
-#             prediction = np.sort(repredictions,axis=-1)
+            #G = np.einsum('bik, bjk->bij', feature_map, feature_map)
+            #D = G.diagonal(axis1=1,axis2=2).reshape(b,-1,1)+ np.transpose(G.diagonal(axis1=1,axis2=2).reshape(b,-1,1),axes=(0,2,1)) - 2*G
+            #prediction = np.sqrt(D)
+            #prediction = np.sort(repredictions,axis=-1)
 
             G = tf.einsum('bik, bjk->bij', feature_map, feature_map)
             D = tf.reshape(tf.linalg.diag_part(G),(b,-1,1))+ tf.transpose(tf.reshape(tf.linalg.diag_part(G),(b,-1,1)),perm=(0,2,1)) - 2*G
-            D = tf.where(D<0,0,D) # It is possible  to get negative values in the matrix due to a lack of floating point precision
+            D =  tf.keras.activations.relu(D)
+            #D = tf.where(D<0,0,D) # It is possible  to get negative values in the matrix due to a lack of floating point precision
             D = D+self.epsilon #any zero values in the distance matrix will produce infinite gradients
             norms = tf.sqrt(D)
             prediction = tf.sort(norms,axis=-1)
@@ -173,10 +174,10 @@ class Hierarchical_Post_Processing(Model):
             prediction = tf.image.resize(feature_map,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
             #print(prediction.shape)
             predictions.append(prediction)
-        #output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
-        pred = tf.squeeze(tf.stack(predictions,-1))
-        output = self.conv(pred)
-        output = tf.keras.activations.sigmoid(output)
+        output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
+#         pred = tf.squeeze(tf.stack(predictions,-1))
+#         output = self.conv(pred)
+#         output = tf.keras.activations.sigmoid(output)
         return predictions,output
     
     
