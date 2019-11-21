@@ -162,6 +162,8 @@ class Hierarchical_Post_Processing(Model):
         self.a = 36 /(36+48+60)
         self.b = 48 /(36+48+60)
         self.h = 60 /(36+48+60)
+        self.conv = Conv2D(1,kernel_size=1,padding='same')
+        
    
     def call(self,x,training=True):
         predictions = []
@@ -171,7 +173,10 @@ class Hierarchical_Post_Processing(Model):
             prediction = tf.image.resize(feature_map,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
             #print(prediction.shape)
             predictions.append(prediction)
-        output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
+        #output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
+        pred = tf.squeeze(tf.stack(predictions,-1))
+        output = self.conv(pred)
+        output = tf.keras.activations.sigmoid(output)
         return predictions,output
     
     

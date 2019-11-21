@@ -8,15 +8,21 @@ from architectures import *
 import tensorflow as tf
 from tensorflow.keras.losses import BinaryCrossentropy
 
-def loss_function(gt,maps,loss=tf.keras.losses.BinaryCrossentropy()):
+
+loss = tf.keras.losses.BinaryCrossentropy()
+
+def loss_function(gt,maps,from_outputs=True):
     a = 36 /(36+48+60)
     b = 48 /(36+48+60)
     h = 60 /(36+48+60)
     total_loss = 0.0
     losses = []
-    for i in range(len(maps)):
-        losses.append(loss(gt,maps[i]))
-    total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
+    if from_outputs:
+        total_loss = loss(gt,maps)
+    else:
+        for i in range(len(maps)):
+            losses.append(loss(gt,maps[i]))
+        total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
     return total_loss
 
 def main():

@@ -75,8 +75,7 @@ def train_step(model,loss_function,optimizer,batch,step,*model_args,file_writer=
                 tf.summary.image("images", images, max_outputs=16, step=step)
                 tf.summary.image("masks", ground_truth, max_outputs=16, step=step)
                 tf.summary.image("predictions", outputs, max_outputs=16, step=step)
-                
-                
+                      
     return batch_loss
 
 #@tf.function
@@ -118,15 +117,13 @@ def distributed_test_step(strategy,model,loss_function,batch,step,*model_args,fi
     return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
 
 #@tf.function
-def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*model_args,file_writer=None,strategy=None,threshold=0.5):
+def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*model_args,file_writer=None,strategy=None):
     test_loss.reset_states()
     test_accuracy.reset_states()
-    test_macro_f1.reset_states()
+    #test_macro_f1.reset_states()
     test_PR_AUC.reset_states()
-    fake_Precision.reset_states()
-    real_Precision.reset_states()
-    real_Recall.reset_states()
-    fake_Recall.reset_states()
+    precision.reset_states()
+    recall.reset_states()
         
     bar = tqdm(total=test_dataset_size)
     i=0
@@ -137,7 +134,7 @@ def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*mod
             batch = next(test_dataset)      
             images, ground_truth = batch
             if strategy is None:
-                batch_loss_result = test_step(model,loss_function,batch,step,*model_args,file_writer=None,threshold=threshold)
+                batch_loss_result = test_step(model,loss_function,batch,step,*model_args,file_writer=None)
             else:
                 batch_loss_result = distributed_test_step(strategy,model,loss_function,batch,step,*model_args,file_writer=None)
             bar.update(1)
@@ -152,11 +149,14 @@ def test(model,loss_function,step,test_dataset,test_dataset_size,batch_size,*mod
         with file_writer.as_default():
             tf.summary.scalar('val_accuracy',test_accuracy.result(),step=step)
             tf.summary.scalar('val_loss',test_loss.result(),step=step)
-            tf.summary.scalar('val_macro_f1',test_macro_f1.result(),step=step)
+            tf.summary.scalar('val_precision',batch_precision.result(),step=step)
+            tf.summary.scalar('val_ROC_AUC',test_PR_AUC.result(),step=step)
+            tf.summary.scalar('val_recall',batch_recall.result(),step=step)
+            #tf.summary.scalar('val_macro_f1',test_macro_f1.result(),step=step)
     else:
         print('Accuracy: {}'.format(test_accuracy.result()))
         print('Loss: {}'.format(test_loss.result()))
-        print('Macro_f1: {}'.format(test_macro_f1.result()))
+        #print('Macro_f1: {}'.format(test_macro_f1.result()))
         print('PR_AUC: {}'.format(test_PR_AUC.result()))
         print('precision: {}'.format(precision.result()))
         print('recall: {}'.format(recall.result()))
@@ -232,6 +232,8 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
     elif save_by_metric == 'accuracy':
         metric_to_inspect = test_accuracy
         current_best_metric = best_macro_f1
+    elif save_by_metric is None:
+        metric_to_inspect = None
     else:
         raise Exception('Not Implemented metric')
         
@@ -263,31 +265,37 @@ def train(model,loss_function,optimizer,train_dataset,train_dataset_size,val_dat
                                                  file_writer=val_file_writer,strategy=strategy)
                     #print(val_accuracy)
                     validation_round+=1
-                    if current_best_metric<metric_to_inspect.result().numpy():
-                        current_best_metric=metric_to_inspect.result().numpy()
-                        print('current_best_metric',current_best_metric,'metric_to_inspect',metric_to_inspect.result().numpy())
-                        best_val_acc = test_accuracy.result().numpy()
-                        best_macro_f1 = test_macro_f1.result().numpy()
-                        ckpt.val_acc.assign(best_val_acc)
-                        ckpt.val_macro_f1.assign(best_macro_f1)
-                        ckpt.step.assign(step)
-                        ckpt.epoch.assign(epoch)
-                        save_path = manager.save(checkpoint_number=step)
-                        print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
-                        count_patience = 0
-                    else:
-                        count_patience = count_patience + 1
-                        print('patience level: {}/{}'.format(count_patience,max_patience))
-                        if (count_patience>=max_patience) and (epoch>min_epochs):
-                            ckpt.val_acc.assign(test_accuracy.result().numpy())
-                            ckpt.val_macro_f1.assign(test_macro_f1.result().numpy())
+                    if save_by_metric is not None:
+                        if current_best_metric<metric_to_inspect.result().numpy():
+                            current_best_metric=metric_to_inspect.result().numpy()
+                            print('current_best_metric',current_best_metric,'metric_to_inspect',metric_to_inspect.result().numpy())
+                            best_val_acc = test_accuracy.result().numpy()
+                            best_macro_f1 = test_macro_f1.result().numpy()
+                            ckpt.val_acc.assign(best_val_acc)
+                            ckpt.val_macro_f1.assign(best_macro_f1)
                             ckpt.step.assign(step)
                             ckpt.epoch.assign(epoch)
                             save_path = manager.save(checkpoint_number=step)
-                            print("Saved LAST checkpoint for step {}: {}".format(int(ckpt.step), save_path))
-                            print("stop criterion")
-                            stop_training=True
-                            break
+                            print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
+                            count_patience = 0
+                        else:
+                            count_patience = count_patience + 1
+                            print('patience level: {}/{}'.format(count_patience,max_patience))
+                            if (count_patience>=max_patience) and (epoch>min_epochs):
+                                ckpt.val_acc.assign(test_accuracy.result().numpy())
+                                ckpt.val_macro_f1.assign(test_macro_f1.result().numpy())
+                                ckpt.step.assign(step)
+                                ckpt.epoch.assign(epoch)
+                                save_path = manager.save(checkpoint_number=step)
+                                print("Saved LAST checkpoint for step {}: {}".format(int(ckpt.step), save_path))
+                                print("stop criterion")
+                                stop_training=True
+                                break
+        if save_by_metric is None:
+            ckpt.step.assign(step)
+            ckpt.epoch.assign(epoch)
+            save_path = manager.save(checkpoint_number=step)
+            print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
 
         with train_file_writer.as_default():
             tf.summary.scalar('loss_per_epoch',train_loss.result(),step=epoch)
