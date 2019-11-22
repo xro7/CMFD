@@ -56,7 +56,7 @@ class Trainer():
         self.recall = tf.keras.metrics.Recall()
 
     #@tf.function
-    def train_step(self,batch,step,file_writer=None):
+    def train_step(self,batch,step):
 
         self.batch_accuracy.reset_states()
         self.batch_precision.reset_states()
@@ -83,10 +83,10 @@ class Trainer():
             with file_writer.as_default():
                 tf.summary.scalar('batch_loss',batch_loss,step=step)
                 tf.summary.scalar('batch_accuracy',self.batch_accuracy.result(),step=step)
-                #tf.summary.scalar('batch_macro_f1',batch_macro_f1.result(),step=step)
                 tf.summary.scalar('batch_precision',self.batch_precision.result(),step=step)
                 tf.summary.scalar('batch_recall',self.batch_recall.result(),step=step)
 #                 if step % 500 == 0:
+#if tf.equal(tf.math.floormod(step,tf.constant(500,dtype=tf.int64)),tf.constant(0,dtype=tf.int64)):
 #                     for i,maps in enumerate(feature_maps):
 #                         tf.summary.image("maps_"+str(i), maps, max_outputs=16, step=step)
 #                     tf.summary.image("images", images, max_outputs=16, step=step)
@@ -112,12 +112,12 @@ class Trainer():
     @tf.function
     def distributed_train_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.train_step,args=(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
 
     @tf.function
     def distributed_test_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.test_step, args =(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
 
     def test(self,step,file_writer):
         self.test_loss.reset_states()
@@ -134,9 +134,9 @@ class Trainer():
                 batch = next(self.val_dataset)      
                 images, ground_truth = batch
                 if self.strategy is None:
-                    batch_loss_result = self.test_step(batch,tf.constant(step))
+                    batch_loss_result = self.test_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
-                    batch_loss_result = self.distributed_test_step(batch,tf.constant(step))
+                    batch_loss_result = self.distributed_test_step(batch,tf.constant(step,dtype=tf.int64))
                 bar.update(1)
                 postfix = OrderedDict(loss=f'{batch_loss_result:.4f}', 
                                   accuracy=f'{self.batch_accuracy.result().numpy():.4f}')
@@ -163,8 +163,8 @@ class Trainer():
                 
      
         
-    def create_checkpoint_and_restore(self,choose_ckpt='latest',**kwargs):
-        ckpt = tf.train.Checkpoint(net=self.model,optimizer=self.optimizer,**kwargs)
+    def create_checkpoint_and_restore(self,net,optimizer,choose_ckpt='latest',**kwargs):
+        ckpt = tf.train.Checkpoint(net=net,optimizer=optimizer,**kwargs)
         manager = tf.train.CheckpointManager(ckpt, self.checkpoint_path, max_to_keep=5)
         save_dict = {}
         if self.restore and manager.latest_checkpoint:
@@ -182,8 +182,8 @@ class Trainer():
             print("Initializing from scratch.")
             for attr in kwargs:
                 save_dict[attr] = kwargs[attr].numpy()
-            save_dict['model'] = self.model
-            save_dict['optimizer'] = self.optimizer
+            save_dict['model'] = net
+            save_dict['optimizer'] = optimizer
         return ckpt,manager,save_dict
                 
                
@@ -192,7 +192,7 @@ class Trainer():
         timestamp = int(datetime.now().timestamp())
         save_dict = {'step':tf.Variable(0),'epoch':tf.Variable(1,dtype=tf.int16),'val_acc':tf.Variable(-1.0),'val_macro_f1':tf.Variable(-1.0),
                      'timestamp':tf.Variable(timestamp)}   
-        ckpt,manager,restore_dict = self.create_checkpoint_and_restore(**save_dict)   
+        ckpt,manager,restore_dict = self.create_checkpoint_and_restore(self.model,self.optimizer,**save_dict)   
         step=restore_dict['step']
         best_val_acc = restore_dict['val_acc']
         init_epoch = restore_dict['epoch']
@@ -242,9 +242,9 @@ class Trainer():
             for iteration in range(self.train_dataset_size):
                 batch = next(self.train_dataset)
                 if self.strategy is None:
-                    loss = self.train_step(batch,tf.constant(step))
+                    loss = self.train_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
-                    loss = self.distributed_train_step(batch,tf.constant(step)) 
+                    loss = self.distributed_train_step(batch,tf.constant(step,dtype=tf.int64)) 
                 self.log_to_tensorboard(loss,step,train_file_writer)
                 step+=1
                 bar.update(1)

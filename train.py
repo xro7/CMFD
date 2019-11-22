@@ -126,12 +126,13 @@ def main():
                 total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
                 return total_loss
             else:
-                total_loss = a*tf.reduce_mean(losses[0])+ b*tf.reduce_mean(losses[1]) + h*tf.reduce_mean(losses[2])
+                total_loss = a*tf.reduce_mean(losses[0],axis=[1,2])+ b*tf.reduce_mean(losses[1],axis=[1,2]) + h*tf.reduce_mean(losses[2],axis=[1,2])
                 #total_loss = tf.reduce_mean(total_loss)
-                return total_loss #tf.nn.compute_average_loss(total_loss, global_batch_size=batch_size)
+                total_loss = tf.nn.compute_average_loss(total_loss, global_batch_size=batch_size)
+                return total_loss
             
         def calculate_mask(mask,feature_args):
-            feature_args = tf.expand_dims(feature_args,-1)
+            #feature_args = tf.expand_dims(feature_args,-1)
 
             b,h,w,c = feature_args.shape
             resized_mask = tf.image.resize(mask,(h,w),method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
@@ -140,9 +141,9 @@ def main():
             resized_mask = tf.reshape(resized_mask,(b,-1))
             feature_args = tf.reshape(feature_args,(b,-1))
 
-            rearranged_mask = tf.gather(resized_mask, feature_args,axis=1) # use feature args to rearrange resized_mask in axis 1. Note that rearranges each row, batch times
+            rearranged_mask = tf.gather(resized_mask, feature_args,axis=1) # use feature args to rearrange resized_mask in axis 1. Note that rearranges each row, batch times res: 8 x8 x64
             indices = [[i,i] for i in range(b)]
-            rearranged_mask = tf.gather_nd(rearranged_mask, indices) # need to get only the corresponding ararngements.
+            rearranged_mask = tf.gather_nd(rearranged_mask, indices) # need to get only the corresponding ararngements. res :8 x 64
 
             new_mask = (rearranged_mask + resized_mask) /2.0
             new_mask = tf.where(resized_mask > 0.0,new_mask,0.0)

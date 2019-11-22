@@ -145,9 +145,9 @@ class Feature_Correlation_Matching(Model):
             prediction = tf.sort(norms,axis=-1)
             arg_prediction = tf.argsort(norms,axis=-1)[:,:,1]
             prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
-            prediction = tf.reshape(prediction,(b,h,w))
+            prediction = tf.reshape(prediction,(b,h,w,1))
             predictions.append(prediction)
-            arg_prediction = tf.reshape(arg_prediction,(b,h,w))
+            arg_prediction = tf.reshape(arg_prediction,(b,h,w,1))
             args_predictions.append(arg_prediction)
         return predictions,args_predictions
     
@@ -164,7 +164,7 @@ class Hierarchical_Post_Processing(Model):
         predictions = []
         for feature_map in x:
             #print(feature_map.shape)
-            feature_map = tf.expand_dims(feature_map,-1)
+            #feature_map = tf.expand_dims(feature_map,-1)
             prediction = tf.image.resize(feature_map,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
             #print(prediction.shape)
             predictions.append(prediction)
