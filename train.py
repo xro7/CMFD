@@ -2,7 +2,7 @@ import argparse
 import os
 import itertools
 import numpy as np
-from training_process import define_metrics, train
+from training_process import *
 from dataset.dataset import *
 from architectures import *
 import tensorflow as tf
@@ -134,12 +134,11 @@ def main():
             architecture = CMFD()
         else:
             raise Exception('not implemented')
-
-        define_metrics(accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.keras.metrics.Mean)
-        train(architecture,loss_function,optimizer,train_dataset_iter,train_dataset_size,val_dataset_iter,val_dataset_size,
+        
+        trainer = Trainer(architecture,loss_function,optimizer,train_dataset_iter,train_dataset_size,val_dataset_iter,val_dataset_size,
               args.batch_size,args.epochs,max_patience=100,min_epochs=-1,validation_per_epoch=args.validation_per_epoch,save_by_metric=args.save_by_metric
               ,log_dir='logs/'+args.model+'/'+args.experiment+'_',
               checkpoint_path=os.path.join(args.checkpoint_path,args.experiment,''),restore=args.restore,strategy=strategy)
-
+        trainer.train()
 if __name__ == "__main__":
     main()

@@ -19,20 +19,24 @@ class Inception_Layer(Model):
         self.conv1_2 = Conv2D(self.initial_filter,self.initial_kernel,padding='same')
         self.conv2_1 = Conv2D(self.last_filter,(kernels[0],kernels[0]),padding='same')
         self.conv2_2 = Conv2D(self.last_filter,(kernels[1],kernels[1]),padding='same')
-        
+        self.bn1_1 = BatchNormalization()
+        self.bn1_2 = BatchNormalization()
+        self.bn2_1 = BatchNormalization()
+        self.bn2_2 = BatchNormalization()
+          
     def call(self,x,training=True):
         x1 = self.conv1_1(x)
-        x1 = BatchNormalization()(x1,training=training)
+        x1 = self.bn1_1(x1,training=training)
         x1 = ReLU()(x1)
         x1 = self.conv2_1(x1)
-        x1 = BatchNormalization()(x1,training=training)
+        x1 = self.bn1_2(x1,training=training)
         x1 = ReLU()(x1)
         
         x2 = self.conv1_2(x)
-        x2 = BatchNormalization()(x2,training=training)
+        x2 = self.bn2_1(x2,training=training)
         x2 = ReLU()(x2)
         x2 = self.conv2_2(x2)
-        x2 = BatchNormalization()(x2,training=training)
+        x2 = self.bn2_2 (x2,training=training)
         x2 = ReLU()(x2)
         
         concat = Concatenate(axis=-1)([x1,x2])
@@ -49,7 +53,7 @@ class Pyramid_Extrator_Block(Model):
         self.inception_layers=[]
         for l in range(self.num_layers):
             self.inception_layers.append(Inception_Layer(kernels))
-     
+    
     def call(self,x,training=True):
         prev_output = x
         for l in range(self.num_layers):
@@ -69,12 +73,13 @@ class Transition_Block(Model):
         self.conv = Conv2D(filters,self.kernel_size,padding='same')
         self.pooling_layer=pooling_layer
         self.preprocessing_block = preprocessing_block
+        self.bn = BatchNormalization()
    
     def call(self,x,training=True):
         if self.preprocessing_block and x.shape[0:] != (256,256,3):
             x = tf.image.resize(x,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
         x = self.conv(x)
-        x = BatchNormalization()(x,training=training)
+        x = self.bn(x,training=training)
         x = ReLU()(x)
         x = self.pooling_layer(pool_size=(2,2),strides=(2,2))(x)
         return x
@@ -99,7 +104,7 @@ class Dense_InceptionNet(Model):
                 self.transition_blocks.append(Transition_Block(transition_block_filters[i]))
         for i in range(len(self.pyramid_extractor_layers)):
             self.pyramid_extractors.append(Pyramid_Extrator_Block(pyramid_extractor_layers[i],pyramid_extractor_kernels[i]))
-        
+    
     def call(self,x,training=True):
         transition_maps = []
         x = self.transition_blocks[0](x,training=training)
@@ -123,7 +128,7 @@ class Feature_Correlation_Matching(Model):
         self.Tl = Tl
         self.l = l
         self.epsilon = 1e-9
-   
+    
     def call(self,x,training=True):
         predictions = []
         args_predictions = []
@@ -160,8 +165,7 @@ class Hierarchical_Post_Processing(Model):
         self.b = 48 /(36+48+60)
         self.h = 60 /(36+48+60)
         self.conv = Conv2D(1,kernel_size=1,padding='same')
-        
-   
+         
     def call(self,x,training=True):
         predictions = []
         for feature_map in x:
@@ -171,9 +175,9 @@ class Hierarchical_Post_Processing(Model):
             #print(prediction.shape)
             predictions.append(prediction)
         output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
-#         pred = tf.squeeze(tf.stack(predictions,-1))
-#         output = self.conv(pred)
-#         output = tf.keras.activations.sigmoid(output)
+        #pred = tf.squeeze(tf.stack(predictions,-1))
+        #output = self.conv(pred)
+        #output = tf.keras.activations.sigmoid(output)
         return predictions,output
     
 class CMFD(Model):
@@ -184,8 +188,7 @@ class CMFD(Model):
         self.feature_extractor = Dense_InceptionNet()
         self.correlation_matching = Feature_Correlation_Matching()
         self.post_processing = Hierarchical_Post_Processing()
-
-   
+    
     def call(self,x,training=True):
         x = self.feature_extractor(x,training=training)
         x = self.correlation_matching(x)
