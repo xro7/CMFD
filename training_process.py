@@ -58,10 +58,6 @@ class Trainer():
     #@tf.function
     def train_step(self,batch,step):
 
-        self.batch_accuracy.reset_states()
-        self.batch_precision.reset_states()
-        self.batch_recall.reset_states()
-
         with tf.GradientTape() as tape:
             images, ground_truth = batch
 
@@ -95,7 +91,7 @@ class Trainer():
 
     #@tf.function
     def test_step(self,batch,step):
-        self.batch_accuracy.reset_states()
+        
         images, ground_truth = batch
 
         feature_maps,feature_args,outputs  = self.model(images,training=False)
@@ -133,6 +129,7 @@ class Trainer():
             for iteration in range(self.val_dataset_size):
                 batch = next(self.val_dataset)      
                 images, ground_truth = batch
+                self.batch_accuracy.reset_states()
                 if self.strategy is None:
                     batch_loss_result = self.test_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
@@ -241,6 +238,9 @@ class Trainer():
             validation_round = 1
             for iteration in range(self.train_dataset_size):
                 batch = next(self.train_dataset)
+                self.batch_accuracy.reset_states()
+                self.batch_precision.reset_states()
+                self.batch_recall.reset_states()
                 if self.strategy is None:
                     loss = self.train_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
