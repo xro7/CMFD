@@ -111,24 +111,44 @@ def main():
         else:
             loss = tf.keras.losses.BinaryCrossentropy()
             
-        def loss_function(gt,maps,from_outputs=False):
+        def loss_function(mask,maps,args):
             a = 36 /(36+48+60)
             b = 48 /(36+48+60)
             h = 60 /(36+48+60)
             total_loss = 0.0
             losses = []
-            if from_outputs:
-                total_loss = loss(gt,maps)
-            else:
-                for i in range(len(maps)):
-                    losses.append(loss(gt,maps[i]))
-                total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
+
+            for i in range(len(maps)):
+                new_mask = calculate_mask(mask,args[i])
+                losses.append(loss(new_mask,maps[i]))
+            
             if strategy is  None:
+                total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
                 return total_loss
             else:
-                #print(total_loss.shape)
-                total_loss = tf.reduce_mean(total_loss)
+                total_loss = a*tf.reduce_mean(losses[0])+ b*tf.reduce_mean(losses[1]) + h*tf.reduce_mean(losses[2])
+                #total_loss = tf.reduce_mean(total_loss)
                 return total_loss #tf.nn.compute_average_loss(total_loss, global_batch_size=batch_size)
+            
+        def calculate_mask(mask,feature_args):
+            feature_args = tf.expand_dims(feature_args,-1)
+
+            b,h,w,c = feature_args.shape
+            resized_mask = tf.image.resize(mask,(h,w),method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+            #plt.figure()
+            #plt.imshow(resized_mask.numpy()[0,:,:,0])
+            resized_mask = tf.reshape(resized_mask,(b,-1))
+            feature_args = tf.reshape(feature_args,(b,-1))
+
+            rearranged_mask = tf.gather(resized_mask, feature_args,axis=1) # use feature args to rearrange resized_mask in axis 1. Note that rearranges each row, batch times
+            indices = [[i,i] for i in range(b)]
+            rearranged_mask = tf.gather_nd(rearranged_mask, indices) # need to get only the corresponding ararngements.
+
+            new_mask = (rearranged_mask + resized_mask) /2.0
+            new_mask = tf.where(resized_mask > 0.0,new_mask,0.0)
+            new_mask = tf.reshape(new_mask,(b,h,w,c))
+            #plt.imshow(new_mask.numpy()[0,:,:,0])
+            return new_mask            
             
         if args.model == 'dense_inception':
             architecture = CMFD()

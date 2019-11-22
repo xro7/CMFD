@@ -65,10 +65,10 @@ class Trainer():
         with tf.GradientTape() as tape:
             images, ground_truth = batch
 
-            feature_maps,outputs = self.model(images,training=True)
-            batch_loss = self.loss_function(ground_truth,feature_maps)
-            self.batch_accuracy.update_state(ground_truth,outputs)
+            feature_maps,feature_args,outputs = self.model(images,training=True)
+            batch_loss = self.loss_function(ground_truth,feature_maps,feature_args)
             self.train_loss.update_state(batch_loss)
+            self.batch_accuracy.update_state(ground_truth,outputs)
             self.train_accuracy.update_state(ground_truth,outputs)
             self.batch_precision.update_state(ground_truth,outputs)
             self.batch_recall.update_state(ground_truth,outputs)
@@ -98,11 +98,10 @@ class Trainer():
         self.batch_accuracy.reset_states()
         images, ground_truth = batch
 
-        feature_maps,outputs = self.model(images,training=False)
-        batch_loss = self.loss_function(ground_truth,feature_maps)
-
-        self.batch_accuracy.update_state(ground_truth,outputs)
+        feature_maps,feature_args,outputs  = self.model(images,training=False)
+        batch_loss = self.loss_function(ground_truth,feature_maps,feature_args)
         self.test_loss.update_state(batch_loss)
+        self.batch_accuracy.update_state(ground_truth,outputs)
         self.test_accuracy.update_state(ground_truth,outputs)
         self.test_PR_AUC.update_state(ground_truth,outputs)
         self.precision.update_state(ground_truth,outputs)
@@ -113,12 +112,12 @@ class Trainer():
     @tf.function
     def distributed_train_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.train_step,args=(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
 
     @tf.function
     def distributed_test_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.test_step, args =(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
 
     def test(self,step,file_writer):
         self.test_loss.reset_states()
@@ -140,7 +139,7 @@ class Trainer():
                     batch_loss_result = self.distributed_test_step(batch,tf.constant(step))
                 bar.update(1)
                 postfix = OrderedDict(loss=f'{batch_loss_result:.4f}', 
-                                  accuracy=f'{self.batch_accuracy.result():.4f}')
+                                  accuracy=f'{self.batch_accuracy.result().numpy():.4f}')
                 bar.set_postfix(postfix)
 
         except StopIteration:
@@ -250,7 +249,7 @@ class Trainer():
                 step+=1
                 bar.update(1)
                 postfix = OrderedDict(loss=f'{loss:.4f}', 
-                                  accuracy=f'{self.batch_accuracy.result():.4f}')
+                                  accuracy=f'{self.batch_accuracy.result().numpy():.4f}')
                 bar.set_postfix(postfix)
 
                 if self.val_dataset is not None:
@@ -265,11 +264,11 @@ class Trainer():
                 ckpt.step.assign(step)
                 ckpt.epoch.assign(epoch)
                 save_path = manager.save(checkpoint_number=step)
-                print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
+                print("Saved checkpoint for step {}: {}".format(step, save_path))
 
             with train_file_writer.as_default():
-                tf.summary.scalar('loss_per_epoch',train_loss.result(),step=epoch)
-                tf.summary.scalar('accuracy_per_epoch',train_accuracy.result(),step=epoch)
+                tf.summary.scalar('loss_per_epoch',self.train_loss.result(),step=epoch)
+                tf.summary.scalar('accuracy_per_epoch',self.train_accuracy.result(),step=epoch)
 
 
 

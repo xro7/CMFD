@@ -23,7 +23,8 @@ class Inception_Layer(Model):
         self.bn1_2 = BatchNormalization()
         self.bn2_1 = BatchNormalization()
         self.bn2_2 = BatchNormalization()
-          
+    
+    #@tf.function
     def call(self,x,training=True):
         x1 = self.conv1_1(x)
         x1 = self.bn1_1(x1,training=training)
@@ -53,14 +54,13 @@ class Pyramid_Extrator_Block(Model):
         self.inception_layers=[]
         for l in range(self.num_layers):
             self.inception_layers.append(Inception_Layer(kernels))
-    
+            
+    #@tf.function
     def call(self,x,training=True):
         prev_output = x
         for l in range(self.num_layers):
-            
             output = self.inception_layers[l](prev_output)
             prev_output = Concatenate(axis=-1)([output,prev_output])
-
         return prev_output
     
 class Transition_Block(Model):
@@ -74,7 +74,8 @@ class Transition_Block(Model):
         self.pooling_layer=pooling_layer
         self.preprocessing_block = preprocessing_block
         self.bn = BatchNormalization()
-   
+        
+    #@tf.function
     def call(self,x,training=True):
         if self.preprocessing_block and x.shape[0:] != (256,256,3):
             x = tf.image.resize(x,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
@@ -134,28 +135,21 @@ class Feature_Correlation_Matching(Model):
         args_predictions = []
         for feature_map in x:
             b,h,w,c = feature_map.shape
-            feature_map = tf.reshape(feature_map,(b,-1,c))
-            
+            feature_map = tf.reshape(feature_map,(b,-1,c))           
             # http://www.robots.ox.ac.uk/~albanie/notes/Euclidean_distance_trick.pdf
-            #numpy
-            #G = np.einsum('bik, bjk->bij', feature_map, feature_map)
-            #D = G.diagonal(axis1=1,axis2=2).reshape(b,-1,1)+ np.transpose(G.diagonal(axis1=1,axis2=2).reshape(b,-1,1),axes=(0,2,1)) - 2*G
-            #prediction = np.sqrt(D)
-            #prediction = np.sort(repredictions,axis=-1)
-
             G = tf.einsum('bik, bjk->bij', feature_map, feature_map)
             D = tf.reshape(tf.linalg.diag_part(G),(b,-1,1))+ tf.transpose(tf.reshape(tf.linalg.diag_part(G),(b,-1,1)),perm=(0,2,1)) - 2*G
-            D =  tf.keras.activations.relu(D)
-            #D = tf.where(D<0,0,D) # It is possible  to get negative values in the matrix due to a lack of floating point precision
+            D =  tf.keras.activations.relu(D)  # It is possible  to get negative values in the matrix due to a lack of floating point precision
             D = D+self.epsilon #any zero values in the distance matrix will produce infinite gradients
             norms = tf.sqrt(D)
             prediction = tf.sort(norms,axis=-1)
-
+            arg_prediction = tf.argsort(norms,axis=-1)[:,:,1]
             prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
             prediction = tf.reshape(prediction,(b,h,w))
             predictions.append(prediction)
-            
-        return predictions
+            arg_prediction = tf.reshape(arg_prediction,(b,h,w))
+            args_predictions.append(arg_prediction)
+        return predictions,args_predictions
     
 class Hierarchical_Post_Processing(Model):
 
@@ -164,7 +158,7 @@ class Hierarchical_Post_Processing(Model):
         self.a = 36 /(36+48+60)
         self.b = 48 /(36+48+60)
         self.h = 60 /(36+48+60)
-        self.conv = Conv2D(1,kernel_size=1,padding='same')
+        #self.conv = Conv2D(1,kernel_size=1,padding='same')
          
     def call(self,x,training=True):
         predictions = []
@@ -178,7 +172,7 @@ class Hierarchical_Post_Processing(Model):
         #pred = tf.squeeze(tf.stack(predictions,-1))
         #output = self.conv(pred)
         #output = tf.keras.activations.sigmoid(output)
-        return predictions,output
+        return output
     
 class CMFD(Model):
 
@@ -191,6 +185,6 @@ class CMFD(Model):
     
     def call(self,x,training=True):
         x = self.feature_extractor(x,training=training)
-        x = self.correlation_matching(x)
-        maps,output = self.post_processing(x)
-        return maps,output
+        feature_maps,args = self.correlation_matching(x)
+        output = self.post_processing(feature_maps)
+        return feature_maps,args,output

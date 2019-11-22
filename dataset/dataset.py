@@ -106,21 +106,7 @@ def iterator_sizes(sizes,batch_size,drop_remainder=True):
             
 def create_dataset(image_paths,mask_files,batch_size,image_size,use_cashe=True,cashe_dir='.cashed_data',extension='jpg',drop_remainder=False,sort=False,shuffle=True):
     
-#     if os.path.exists(cashe_dir) and use_cashe:   
-#         print('restoring from cashe')
-#         with open(os.path.join(cashe_dir,'train_paths.pickle'), "rb") as fp:   #Pickling
-#             train_paths = pickle.load(fp)
-#         with open(os.path.join(cashe_dir,'train_labels.pickle'), "rb") as fp:   #Pickling
-#             train_labels = pickle.load(fp)
-#         with open(os.path.join(cashe_dir,'test_paths.pickle'), "rb") as fp:   #Pickling
-#             test_paths = pickle.load(fp)
-#         with open(os.path.join(cashe_dir,'test_labels.pickle'), "rb") as fp:   #Pickling
-#             test_labels = pickle.load(fp)
-#         with open(os.path.join(cashe_dir,'val_paths.pickle'), "rb") as fp:   #Pickling
-#             val_paths = pickle.load(fp)
-#         with open(os.path.join(cashe_dir,'val_labels.pickle'), "rb") as fp:   #Pickling
-#             val_labels = pickle.load(fp)
-#     else:
+
     print('getting files from specified paths')
     if isinstance(image_paths,str):
         image_paths = [image_paths]
@@ -129,35 +115,6 @@ def create_dataset(image_paths,mask_files,batch_size,image_size,use_cashe=True,c
     print('image_files',len(image_files))
     #image_files = [file for file in image_files if os.path.exists(file.replace('/images/', '/masks/'))]
     mask_files = [file.replace('/images/', '/masks/')  for file in image_files]
-
-#     if isinstance(image_paths,str):
-#         image_paths = [image_paths]
-#     image_files = get_image_files_from_dirs(image_paths,extension=extension,sort=sort)
-#     print('image_files',len(image_files))
-    #os.makedirs(cashe_dir,exist_ok=True)
-#         with open(os.path.join(cashe_dir,'train_paths.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(train_paths, fp)
-#         with open(os.path.join(cashe_dir,'train_labels.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(train_labels, fp)
-#         with open(os.path.join(cashe_dir,'test_paths.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(test_paths, fp)
-#         with open(os.path.join(cashe_dir,'test_labels.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(test_labels, fp)
-#         with open(os.path.join(cashe_dir,'val_paths.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(val_paths, fp)
-#         with open(os.path.join(cashe_dir,'val_labels.pickle'), "wb") as fp:   #Pickling
-#             pickle.dump(val_labels, fp)              
-
-    
-    
-#     print(len(train_paths),len(test_paths),len(val_paths))
-#     print(len(train_labels),len(test_labels),len(val_labels))
-#     print('train fake images: '+str(int(np.array(train_labels).sum())))
-#     print('train real images: '+str(len(train_labels)- int(np.array(train_labels).sum())))
-#     print('train val images: '+str(int(np.array(val_labels).sum())))
-#     print('train val images: '+str(len(val_labels)- int(np.array(val_labels).sum())))
-#     print('train test images: '+str(int(np.array(test_labels).sum())))
-#     print('train test images: '+str(len(test_labels)- int(np.array(test_labels).sum())))
     
     print('creating tf.Datasets')
     dataset = create_tf_dataset(image_files,mask_files,batch_size,image_size,repeat=True,shuffle=shuffle,drop_remainder=drop_remainder)
