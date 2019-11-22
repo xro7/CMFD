@@ -91,8 +91,8 @@ def test_step(model,loss_function,batch,step,file_writer=None):
     test_loss.update_state(batch_loss)
     test_accuracy.update_state(ground_truth,outputs)
     test_PR_AUC.update_state(ground_truth,outputs)
-    precision.update_state(actuals,preds)
-    recall.update_state(actuals,preds)
+    precision.update_state(ground_truth,outputs)
+    recall.update_state(ground_truth,outputs)
     
 #     actuals = tf.reshape(ground_truth,(-1,1))       
 #     preds = tf.reshape(outputs,(-1,1)) 

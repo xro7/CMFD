@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--dataset_root', type=str)
     parser.add_argument('--model', type=str, default='dense_inception',help='architecture')
     parser.add_argument('--restore', default=False, action='store_true')
-    parser.add_argument('--save_by_metric', choices=['accuracy','macro-f1'], type=str, default='accuracy')
+    parser.add_argument('--save_by_metric', choices=['accuracy','macro-f1'], type=str, default=None)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--gpu_id', type=str, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-3)

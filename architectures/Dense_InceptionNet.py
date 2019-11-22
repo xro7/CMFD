@@ -38,7 +38,6 @@ class Inception_Layer(Model):
         concat = Concatenate(axis=-1)([x1,x2])
         return concat
 
-
 class Pyramid_Extrator_Block(Model):
     '''
     Outputs a feature map with the same spatial dimensions and (12 * num_layers + x.shape[-1]) channels
@@ -50,8 +49,7 @@ class Pyramid_Extrator_Block(Model):
         self.inception_layers=[]
         for l in range(self.num_layers):
             self.inception_layers.append(Inception_Layer(kernels))
-
-        
+     
     def call(self,x,training=True):
         prev_output = x
         for l in range(self.num_layers):
@@ -101,7 +99,6 @@ class Dense_InceptionNet(Model):
                 self.transition_blocks.append(Transition_Block(transition_block_filters[i]))
         for i in range(len(self.pyramid_extractor_layers)):
             self.pyramid_extractors.append(Pyramid_Extrator_Block(pyramid_extractor_layers[i],pyramid_extractor_kernels[i]))
-
         
     def call(self,x,training=True):
         transition_maps = []
@@ -119,7 +116,6 @@ class Dense_InceptionNet(Model):
         else:
             return x
         
-
 class Feature_Correlation_Matching(Model):
 
     def __init__(self, Tl=0.6 ,l=2):
@@ -179,7 +175,6 @@ class Hierarchical_Post_Processing(Model):
 #         output = self.conv(pred)
 #         output = tf.keras.activations.sigmoid(output)
         return predictions,output
-    
     
 class CMFD(Model):
 
