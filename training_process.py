@@ -77,10 +77,10 @@ class Trainer():
     def log_to_tensorboard(self,batch_loss,step,file_writer=None):
         if file_writer is not None:
             with file_writer.as_default():
-                tf.summary.scalar('batch_loss',batch_loss,step=step)
-                tf.summary.scalar('batch_accuracy',self.batch_accuracy.result(),step=step)
-                tf.summary.scalar('batch_precision',self.batch_precision.result(),step=step)
-                tf.summary.scalar('batch_recall',self.batch_recall.result(),step=step)
+                tf.summary.scalar('loss',batch_loss,step=step)
+                tf.summary.scalar('accuracy',self.batch_accuracy.result(),step=step)
+                tf.summary.scalar('precision',self.batch_precision.result(),step=step)
+                tf.summary.scalar('recall',self.batch_recall.result(),step=step)
 #                 if step % 500 == 0:
 #if tf.equal(tf.math.floormod(step,tf.constant(500,dtype=tf.int64)),tf.constant(0,dtype=tf.int64)):
 #                     for i,maps in enumerate(feature_maps):
@@ -105,7 +105,7 @@ class Trainer():
         
         if file_writer is not None:
             with file_writer.as_default():
-                 if step % 100 == 0:
+                 if step % 300 == 0:
                     tf.summary.image("images", images, max_outputs=8, step=step)
                     tf.summary.image("masks", ground_truth, max_outputs=8, step=step)
                     tf.summary.image("outputs", outputs, max_outputs=8, step=step)
@@ -152,7 +152,7 @@ class Trainer():
         except StopIteration:
             pass
 
-        if file_writer is not None:
+        if file_writer is not None and not count_steps:
             with file_writer.as_default():
                 tf.summary.scalar('accuracy',self.test_accuracy.result(),step=step)
                 tf.summary.scalar('loss',self.test_loss.result(),step=step)
@@ -276,9 +276,9 @@ class Trainer():
                 save_path = manager.save(checkpoint_number=step)
                 print("Saved checkpoint for step {}: {}".format(step, save_path))
 
-            with train_file_writer.as_default():
-                tf.summary.scalar('loss_per_epoch',self.train_loss.result(),step=epoch)
-                tf.summary.scalar('accuracy_per_epoch',self.train_accuracy.result(),step=epoch)
+#             with train_file_writer.as_default():
+#                 tf.summary.scalar('loss_per_epoch',self.train_loss.result(),step=epoch)
+#                 tf.summary.scalar('accuracy_per_epoch',self.train_accuracy.result(),step=epoch)
 
 
 
