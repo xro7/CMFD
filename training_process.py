@@ -90,7 +90,7 @@ class Trainer():
 #                     tf.summary.image("predictions", outputs, max_outputs=16, step=step)
 
     #@tf.function
-    def test_step(self,batch,step):
+    def test_step(self,batch,step,file_writer=None):
         
         images, ground_truth = batch
 
@@ -102,6 +102,13 @@ class Trainer():
         self.test_PR_AUC.update_state(ground_truth,outputs)
         self.precision.update_state(ground_truth,outputs)
         self.recall.update_state(ground_truth,outputs)
+        
+        if file_writer is not None:
+            with file_writer.as_default():
+                 if step % 100 == 0:
+                    tf.summary.image("images", images, max_outputs=8, step=step)
+                    tf.summary.image("masks", ground_truth, max_outputs=8, step=step)
+                    tf.summary.image("outputs", outputs, max_outputs=8, step=step)
         
         return batch_loss
 
@@ -115,23 +122,26 @@ class Trainer():
         per_replica_loss = self.strategy.experimental_run_v2(self.test_step, args =(batch,step))
         return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
 
-    def test(self,step,file_writer):
+    def test(self,step=None,file_writer=None):
         self.test_loss.reset_states()
         self.test_accuracy.reset_states()
         self.test_PR_AUC.reset_states()
         self.precision.reset_states()
         self.recall.reset_states()
-
         bar = tqdm(total=self.val_dataset_size)
-        i=0
+        count_steps = False
+        if step is None:
+            count_steps=True
 
         try:
             for iteration in range(self.val_dataset_size):
+                if count_steps:
+                    step = iteration
                 batch = next(self.val_dataset)      
                 images, ground_truth = batch
                 self.batch_accuracy.reset_states()
                 if self.strategy is None:
-                    batch_loss_result = self.test_step(batch,tf.constant(step,dtype=tf.int64))
+                    batch_loss_result = self.test_step(batch,tf.constant(step,dtype=tf.int64),file_writer)
                 else:
                     batch_loss_result = self.distributed_test_step(batch,tf.constant(step,dtype=tf.int64))
                 bar.update(1)
@@ -144,17 +154,17 @@ class Trainer():
 
         if file_writer is not None:
             with file_writer.as_default():
-                tf.summary.scalar('val_accuracy',self.test_accuracy.result(),step=step)
-                tf.summary.scalar('val_loss',self.test_loss.result(),step=step)
-                tf.summary.scalar('val_precision',self.batch_precision.result(),step=step)
-                tf.summary.scalar('val_ROC_AUC',self.test_PR_AUC.result(),step=step)
-                tf.summary.scalar('val_recall',self.batch_recall.result(),step=step)
+                tf.summary.scalar('accuracy',self.test_accuracy.result(),step=step)
+                tf.summary.scalar('loss',self.test_loss.result(),step=step)
+                tf.summary.scalar('precision',self.precision.result(),step=step)
+                tf.summary.scalar('ROC_AUC',self.test_PR_AUC.result(),step=step)
+                tf.summary.scalar('recall',self.recall.result(),step=step)
                 #tf.summary.scalar('val_macro_f1',test_macro_f1.result(),step=step)
         else:
             print('Accuracy: {}'.format(self.test_accuracy.result()))
             print('Loss: {}'.format(self.test_loss.result()))
             #print('Macro_f1: {}'.format(test_macro_f1.result()))
-            print('PR_AUC: {}'.format(self.test_PR_AUC.result()))
+            print('ROC_AUC: {}'.format(self.test_PR_AUC.result()))
             print('precision: {}'.format(self.precision.result()))
             print('recall: {}'.format(self.recall.result()))
                 
