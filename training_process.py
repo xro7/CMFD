@@ -41,9 +41,11 @@ class Trainer():
         self.restore = restore
         self.strategy = strategy
         self.define_metrics()
+        self.epsilon = 1e-12
     
 
-    def define_metrics(self,accuracy=tf.keras.metrics.BinaryAccuracy,loss_aggregation=tf.keras.metrics.Mean,f1_score=tfa.metrics.F1Score,classes=1,test_threshold=0.5):
+    def define_metrics(self,accuracy=tf.keras.metrics.BinaryAccuracy, loss_aggregation=tf.keras.metrics.Sum, classes=1, test_threshold=0.5):
+        
         self.batch_accuracy = accuracy()
         self.train_loss = loss_aggregation()
         self.train_accuracy = accuracy()
@@ -54,6 +56,11 @@ class Trainer():
         self.batch_recall = tf.keras.metrics.Recall()
         self.precision = tf.keras.metrics.Precision()
         self.recall = tf.keras.metrics.Recall()
+        
+    def f1_score(self, precision, recall):
+        f1_score = 2 * (precision * recall) / (precision+recall+ self.epsilon)
+        return f1_score
+        
 
     #@tf.function
     def train_step(self,batch,step):
@@ -80,14 +87,8 @@ class Trainer():
                 tf.summary.scalar('loss',batch_loss,step=step)
                 tf.summary.scalar('accuracy',self.batch_accuracy.result(),step=step)
                 tf.summary.scalar('precision',self.batch_precision.result(),step=step)
-                tf.summary.scalar('recall',self.batch_recall.result(),step=step)
-#                 if step % 500 == 0:
-#if tf.equal(tf.math.floormod(step,tf.constant(500,dtype=tf.int64)),tf.constant(0,dtype=tf.int64)):
-#                     for i,maps in enumerate(feature_maps):
-#                         tf.summary.image("maps_"+str(i), maps, max_outputs=16, step=step)
-#                     tf.summary.image("images", images, max_outputs=16, step=step)
-#                     tf.summary.image("masks", ground_truth, max_outputs=16, step=step)
-#                     tf.summary.image("predictions", outputs, max_outputs=16, step=step)
+                tf.summary.scalar('recall',self.batch_recall.result(),step=step)            
+                tf.summary.scalar('f1',self.f1_score(self.batch_precision.result(),self.batch_recall.result()),step=step)
 
     #@tf.function
     def test_step(self,batch,step,file_writer=None):
@@ -159,14 +160,14 @@ class Trainer():
                 tf.summary.scalar('precision',self.precision.result(),step=step)
                 tf.summary.scalar('ROC_AUC',self.test_PR_AUC.result(),step=step)
                 tf.summary.scalar('recall',self.recall.result(),step=step)
-                #tf.summary.scalar('val_macro_f1',test_macro_f1.result(),step=step)
+                tf.summary.scalar('f1',self.f1_score(self.precision.result(),self.recall.result()),step=step)
         else:
             print('Accuracy: {}'.format(self.test_accuracy.result()))
             print('Loss: {}'.format(self.test_loss.result()))
-            #print('Macro_f1: {}'.format(test_macro_f1.result()))
             print('ROC_AUC: {}'.format(self.test_PR_AUC.result()))
             print('precision: {}'.format(self.precision.result()))
             print('recall: {}'.format(self.recall.result()))
+            print('f1',{}.format(self.f1_score(self.precision.result(),self.recall.result())))
                 
      
         
