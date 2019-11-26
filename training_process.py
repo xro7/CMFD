@@ -44,7 +44,7 @@ class Trainer():
         self.epsilon = 1e-12
     
 
-    def define_metrics(self,accuracy=tf.keras.metrics.BinaryAccuracy, loss_aggregation=tf.keras.metrics.Sum, classes=1, test_threshold=0.5):
+    def define_metrics(self,accuracy=tf.keras.metrics.BinaryAccuracy, loss_aggregation=tf.keras.metrics.Mean, classes=1, test_threshold=0.5):
         
         self.batch_accuracy = accuracy()
         self.train_loss = loss_aggregation()
@@ -75,8 +75,10 @@ class Trainer():
             self.batch_accuracy.update_state(ground_truth,outputs)
             self.train_accuracy.update_state(ground_truth,outputs)
             self.batch_precision.update_state(ground_truth,outputs)
-            self.batch_recall.update_state(ground_truth,outputs)
-            self.iou.update_state(ground_truth,outputs)
+            self.batch_recall.update_state(ground_truth,outputs)            
+            rounded_predictions = tf.where(tf.greater_equal(outputs,tf.constant(0.5)),tf.ones_like(outputs),tf.zeros_like(outputs))
+            self.iou.update_state(ground_truth,rounded_predictions)
+            
 
         gradients = tape.gradient(batch_loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
@@ -90,7 +92,7 @@ class Trainer():
                 tf.summary.scalar('accuracy',self.batch_accuracy.result(),step=step)
                 tf.summary.scalar('precision',self.batch_precision.result(),step=step)
                 tf.summary.scalar('recall',self.batch_recall.result(),step=step)        
-                tf.summary.scalar('IoU',self.iou.result(),step=step)     
+                tf.summary.scalar('meanIoU',self.iou.result(),step=step)     
                 tf.summary.scalar('f1',self.f1_score(self.batch_precision.result(),self.batch_recall.result()),step=step)
 
     #@tf.function
@@ -106,7 +108,8 @@ class Trainer():
         self.test_PR_AUC.update_state(ground_truth,outputs)
         self.precision.update_state(ground_truth,outputs)
         self.recall.update_state(ground_truth,outputs)
-        self.iou.update_state(ground_truth,outputs)
+        rounded_predictions = tf.where(tf.greater_equal(outputs,tf.constant(0.5)),tf.ones_like(outputs),tf.zeros_like(outputs))
+        self.iou.update_state(ground_truth,rounded_predictions)
         
         if file_writer is not None:
             with file_writer.as_default():
@@ -166,7 +169,7 @@ class Trainer():
                 tf.summary.scalar('ROC_AUC',self.test_PR_AUC.result(),step=step)
                 tf.summary.scalar('recall',self.recall.result(),step=step)
                 tf.summary.scalar('f1',self.f1_score(self.precision.result(),self.recall.result()),step=step)
-                tf.summary.scalar('IoU',self.iou.result(),step=step)  
+                tf.summary.scalar('meanIoU',self.iou.result(),step=step)  
         else:
             print('Accuracy: {}'.format(self.test_accuracy.result()))
             print('Loss: {}'.format(self.test_loss.result()))
@@ -174,7 +177,7 @@ class Trainer():
             print('precision: {}'.format(self.precision.result()))
             print('recall: {}'.format(self.recall.result()))
             print('f1',{}.format(self.f1_score(self.precision.result(),self.recall.result())))
-            print('IoU: {}'.format(self.iou.result()))
+            print('meanIoU: {}'.format(self.iou.result()))
         
     def create_checkpoint_and_restore(self,net,optimizer,choose_ckpt='latest',**kwargs):
         ckpt = tf.train.Checkpoint(net=net,optimizer=optimizer,**kwargs)
