@@ -56,6 +56,7 @@ class Trainer():
         self.batch_recall = tf.keras.metrics.Recall()
         self.precision = tf.keras.metrics.Precision()
         self.recall = tf.keras.metrics.Recall()
+        self.iou = tf.keras.metrics.MeanIoU(num_classes=2)
         
     def f1_score(self, precision, recall):
         f1_score = 2 * (precision * recall) / (precision+recall+ self.epsilon)
@@ -75,6 +76,7 @@ class Trainer():
             self.train_accuracy.update_state(ground_truth,outputs)
             self.batch_precision.update_state(ground_truth,outputs)
             self.batch_recall.update_state(ground_truth,outputs)
+            self.iou.update_state(ground_truth,outputs)
 
         gradients = tape.gradient(batch_loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
@@ -87,7 +89,8 @@ class Trainer():
                 tf.summary.scalar('loss',batch_loss,step=step)
                 tf.summary.scalar('accuracy',self.batch_accuracy.result(),step=step)
                 tf.summary.scalar('precision',self.batch_precision.result(),step=step)
-                tf.summary.scalar('recall',self.batch_recall.result(),step=step)            
+                tf.summary.scalar('recall',self.batch_recall.result(),step=step)        
+                tf.summary.scalar('IoU',self.iou.result(),step=step)     
                 tf.summary.scalar('f1',self.f1_score(self.batch_precision.result(),self.batch_recall.result()),step=step)
 
     #@tf.function
@@ -103,6 +106,7 @@ class Trainer():
         self.test_PR_AUC.update_state(ground_truth,outputs)
         self.precision.update_state(ground_truth,outputs)
         self.recall.update_state(ground_truth,outputs)
+        self.iou.update_state(ground_truth,outputs)
         
         if file_writer is not None:
             with file_writer.as_default():
@@ -129,6 +133,7 @@ class Trainer():
         self.test_PR_AUC.reset_states()
         self.precision.reset_states()
         self.recall.reset_states()
+        self.iou.reset_states()
         bar = tqdm(total=self.val_dataset_size)
         count_steps = False
         if step is None:
@@ -161,6 +166,7 @@ class Trainer():
                 tf.summary.scalar('ROC_AUC',self.test_PR_AUC.result(),step=step)
                 tf.summary.scalar('recall',self.recall.result(),step=step)
                 tf.summary.scalar('f1',self.f1_score(self.precision.result(),self.recall.result()),step=step)
+                tf.summary.scalar('IoU',self.iou.result(),step=step)  
         else:
             print('Accuracy: {}'.format(self.test_accuracy.result()))
             print('Loss: {}'.format(self.test_loss.result()))
@@ -168,8 +174,7 @@ class Trainer():
             print('precision: {}'.format(self.precision.result()))
             print('recall: {}'.format(self.recall.result()))
             print('f1',{}.format(self.f1_score(self.precision.result(),self.recall.result())))
-                
-     
+            print('IoU: {}'.format(self.iou.result()))
         
     def create_checkpoint_and_restore(self,net,optimizer,choose_ckpt='latest',**kwargs):
         ckpt = tf.train.Checkpoint(net=net,optimizer=optimizer,**kwargs)
@@ -252,6 +257,7 @@ class Trainer():
                 self.batch_accuracy.reset_states()
                 self.batch_precision.reset_states()
                 self.batch_recall.reset_states()
+                self.iou.reset_states()
                 if self.strategy is None:
                     loss = self.train_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
