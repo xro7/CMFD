@@ -79,6 +79,7 @@ class Trainer():
             rounded_predictions = tf.where(tf.greater_equal(outputs,tf.constant(0.5)),tf.ones_like(outputs),tf.zeros_like(outputs))
             self.iou.update_state(ground_truth,rounded_predictions)
             
+            
 
         gradients = tape.gradient(batch_loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
@@ -94,7 +95,7 @@ class Trainer():
                 tf.summary.scalar('recall',self.batch_recall.result(),step=step)        
                 tf.summary.scalar('meanIoU',self.iou.result(),step=step)     
                 tf.summary.scalar('f1',self.f1_score(self.batch_precision.result(),self.batch_recall.result()),step=step)
-
+                
     #@tf.function
     def test_step(self,batch,step,file_writer=None):
         
@@ -123,12 +124,12 @@ class Trainer():
     @tf.function
     def distributed_train_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.train_step,args=(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
 
     @tf.function
     def distributed_test_step(self,batch,step):
         per_replica_loss = self.strategy.experimental_run_v2(self.test_step, args =(batch,step))
-        return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_loss,axis=None)
+        return self.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss,axis=None)
 
     def test(self,step=None,file_writer=None):
         self.test_loss.reset_states()
@@ -206,14 +207,13 @@ class Trainer():
     def train(self):
 
         timestamp = int(datetime.now().timestamp())
-        save_dict = {'step':tf.Variable(0),'epoch':tf.Variable(1,dtype=tf.int16),'val_acc':tf.Variable(-1.0),'val_macro_f1':tf.Variable(-1.0),
+        save_dict = {'step':tf.Variable(0),'epoch':tf.Variable(1,dtype=tf.int16),'metric':tf.Variable(100.0),
                      'timestamp':tf.Variable(timestamp)}   
         ckpt,manager,restore_dict = self.create_checkpoint_and_restore(self.model,self.optimizer,**save_dict)   
         step=restore_dict['step']
-        best_val_acc = restore_dict['val_acc']
+        metric = restore_dict['metric']
         init_epoch = restore_dict['epoch']
         timestamp = restore_dict['timestamp']
-        best_macro_f1 = restore_dict['val_macro_f1']
         model = restore_dict['model']
         optimizer  = restore_dict['optimizer']
         print(restore_dict)
@@ -235,12 +235,8 @@ class Trainer():
         stop_training=False
         step_to_validate = self.train_dataset_size//self.validation_per_epoch
 
-        if self.save_by_metric == 'macro-f1':
-            metric_to_inspect = test_macro_f1
-            current_best_metric = best_val_acc
-        elif self.save_by_metric == 'accuracy':
-            metric_to_inspect = test_accuracy
-            current_best_metric = best_macro_f1
+        if self.save_by_metric == 'metric':
+            metric_to_inspect = metric
         elif self.save_by_metric is None:
             metric_to_inspect = None
         else:
@@ -280,19 +276,24 @@ class Trainer():
                         validation_round+=1
                 
                 
-            if self.save_by_metric is None:
-                ckpt.step.assign(step)
-                ckpt.epoch.assign(epoch)
-                save_path = manager.save(checkpoint_number=step)
-                print("Saved checkpoint for step {}: {}".format(step, save_path))
-
-#             with train_file_writer.as_default():
-#                 tf.summary.scalar('loss_per_epoch',self.train_loss.result(),step=epoch)
-#                 tf.summary.scalar('accuracy_per_epoch',self.train_accuracy.result(),step=epoch)
-
-
-
-
+                        if self.save_by_metric is None:
+                            ckpt.step.assign(step)
+                            ckpt.epoch.assign(epoch)
+                            save_path = manager.save(checkpoint_number=step)
+                            print("Saved checkpoint for step {}: {}".format(step, save_path))
+                        else:
+                            #my_metric = self.f1_score(self.precision.result(),self.recall.result())
+                            my_metric = train_loss.result()
+                            if my_metric < self.metric_to_inspect:
+                                ckpt.metric.assign(my_metric)
+                                ckpt.step.assign(step)
+                                ckpt.epoch.assign(epoch)
+                                save_path = manager.save(checkpoint_number=step)
+                                print('Best metric score: ',my_metric,'/ previous: ',self.metric_to_inspect)
+                                print("Saved checkpoint for step {}: {}".format(step, save_path))   
+                                 
+            
+            
             print("EPOCH: ",epoch+1,' finished')
             print ('Time for epoch {} is {} sec'.format(epoch+1, time.time()-start_epoch_time))
             print ('----------------------------------')

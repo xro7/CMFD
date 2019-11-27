@@ -124,11 +124,11 @@ class Dense_InceptionNet(Model):
         
 class Feature_Correlation_Matching(Model):
 
-    def __init__(self, Tl=0.6 ,l=2):
+    def __init__(self, Tl=0.6 ,l=3):
         super(Feature_Correlation_Matching,self).__init__()
         self.Tl = Tl
         self.l = l
-        self.epsilon = 1e-9
+        self.epsilon = 1e-12
     
     def call(self,x,training=True):
         predictions = []
@@ -137,9 +137,9 @@ class Feature_Correlation_Matching(Model):
             b,h,w,c = feature_map.shape
             feature_map = tf.reshape(feature_map,(b,-1,c)) 
             # normalize the feature maps to make the distance 
-            normalized_feature_map,norms = tf.linalg.normalize(feature_map,axis=-1)
+            #feature_map,_ = tf.linalg.normalize(feature_map,axis=-1)
             # http://www.robots.ox.ac.uk/~albanie/notes/Euclidean_distance_trick.pdf
-            G = tf.einsum('bik, bjk->bij', normalized_feature_map, normalized_feature_map)
+            G = tf.einsum('bik, bjk->bij', feature_map, feature_map)
             D = tf.reshape(tf.linalg.diag_part(G),(b,-1,1))+ tf.transpose(tf.reshape(tf.linalg.diag_part(G),(b,-1,1)),perm=(0,2,1)) - 2*G
             D =  tf.keras.activations.relu(D)  # It is possible  to get negative values in the matrix due to a lack of floating point precision
             D = D+self.epsilon #any zero values in the distance matrix will produce infinite gradients

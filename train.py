@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--dataset_root', type=str)
     parser.add_argument('--model', type=str, default='dense_inception',help='architecture')
     parser.add_argument('--restore', default=False, action='store_true')
-    parser.add_argument('--save_by_metric', choices=['accuracy','macro-f1'], type=str, default=None)
+    parser.add_argument('--save_by_metric', choices=['metric',None], type=str, default=None)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--gpu_id', type=str, default=0)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
@@ -126,9 +126,9 @@ def main():
                 total_loss = a*losses[0] + b*losses[1] + h*losses[2] 
                 return total_loss
             else:
-                total_loss = a*tf.reduce_mean(losses[0],axis=[1,2])+ b*tf.reduce_mean(losses[1],axis=[1,2]) + h*tf.reduce_mean(losses[2],axis=[1,2])
+                total_loss = a*tf.reduce_mean(losses[0])+ b*tf.reduce_mean(losses[1]) + h*tf.reduce_mean(losses[2])
                 #total_loss = tf.reduce_mean(total_loss)
-                total_loss = tf.nn.compute_average_loss(total_loss, global_batch_size=batch_size)
+                #total_loss = tf.nn.compute_average_loss(total_loss, global_batch_size=batch_size)
                 return total_loss
             
         def calculate_mask(mask,feature_args):
