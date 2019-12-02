@@ -124,15 +124,17 @@ class Dense_InceptionNet(Model):
         
 class Feature_Correlation_Matching(Model):
 
-    def __init__(self, Tl=0.6 ,l=3):
+    def __init__(self, Tl=0.6 ,l=3,a=-10.0,b=10.0):
         super(Feature_Correlation_Matching,self).__init__()
-        self.Tl = Tl
+        self.Tl = tf.Variable(Tl,trainable=True,dtype=tf.float32)#,synchronization=tf.VariableSynchronization.NONE)
         self.l = l
         self.epsilon = 1e-12
+        self.a = tf.Variable(a,trainable=True,dtype=tf.float32)
+        self.b = tf.Variable(b,trainable=True,dtype=tf.float32)
     
     def call(self,x,training=True):
         predictions = []
-        args_predictions = []
+        #args_predictions = []
         for feature_map in x:
             b,h,w,c = feature_map.shape
             feature_map = tf.reshape(feature_map,(b,-1,c)) 
@@ -145,22 +147,27 @@ class Feature_Correlation_Matching(Model):
             D = D+self.epsilon #any zero values in the distance matrix will produce infinite gradients
             norms = tf.sqrt(D)
             prediction = tf.sort(norms,axis=-1)
-            arg_prediction = tf.argsort(norms,axis=-1)[:,:,1]
-            prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
+            #arg_prediction = tf.argsort(norms,axis=-1)[:,:,1]
+            #prediction = tf.where((prediction[:,:,1] / prediction[:,:,2] < self.Tl), 2/(1+tf.exp(prediction[:,:,1])),2/(1+self.l*tf.exp(prediction[:,:,1])))
+            #prediction = (prediction[:,:,2] - prediction[:,:,1]) + self.Tl # - self.Tl
+            prediction = prediction[:,:,1]/prediction[:,:,2] - self.Tl
+            prediction = tf.clip_by_value(prediction,0.0,1.0)
+            prediction = (self.b-self.a)*prediction+self.a
+            
+            
+            prediction = 1/(1+tf.exp(prediction))
+
             prediction = tf.reshape(prediction,(b,h,w,1))
             predictions.append(prediction)
-            arg_prediction = tf.reshape(arg_prediction,(b,h,w,1))
-            args_predictions.append(arg_prediction)
-        return predictions,args_predictions
+            #arg_prediction = tf.reshape(arg_prediction,(b,h,w,1))
+            #args_predictions.append(arg_prediction)
+        return predictions,self.Tl
     
 class Hierarchical_Post_Processing(Model):
 
     def __init__(self):
         super(Hierarchical_Post_Processing,self).__init__()
-        self.a = 36 /(36+48+60)
-        self.b = 48 /(36+48+60)
-        self.h = 60 /(36+48+60)
-        #self.conv = Conv2D(1,kernel_size=1,padding='same')
+        self.conv = Conv2D(1,kernel_size=1,padding='same')
          
     def call(self,x,training=True):
         predictions = []
@@ -170,10 +177,10 @@ class Hierarchical_Post_Processing(Model):
             prediction = tf.image.resize(feature_map,(256,256),method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False,antialias=False)
             #print(prediction.shape)
             predictions.append(prediction)
-        output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
-        #pred = tf.squeeze(tf.stack(predictions,-1))
-        #output = self.conv(pred)
-        #output = tf.keras.activations.sigmoid(output)
+        #output = self.a *predictions[0] + self.b *predictions[1] + self.h *predictions[2]
+        pred = tf.squeeze(tf.stack(predictions,-1))
+        output = self.conv(pred)
+        output = tf.keras.activations.sigmoid(output)
         return output
     
 class CMFD(Model):
@@ -187,6 +194,6 @@ class CMFD(Model):
     
     def call(self,x,training=True):
         x = self.feature_extractor(x,training=training)
-        feature_maps,args = self.correlation_matching(x)
+        feature_maps,tl = self.correlation_matching(x)
         output = self.post_processing(feature_maps)
-        return feature_maps,args,output
+        return output,tl

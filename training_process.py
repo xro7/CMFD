@@ -57,6 +57,7 @@ class Trainer():
         self.precision = tf.keras.metrics.Precision()
         self.recall = tf.keras.metrics.Recall()
         self.iou = tf.keras.metrics.MeanIoU(num_classes=2)
+        self.tl = loss_aggregation()
         
     def f1_score(self, precision, recall):
         f1_score = 2 * (precision * recall) / (precision+recall+ self.epsilon)
@@ -69,8 +70,8 @@ class Trainer():
         with tf.GradientTape() as tape:
             images, ground_truth = batch
 
-            feature_maps,feature_args,outputs = self.model(images,training=True)
-            batch_loss = self.loss_function(ground_truth,feature_maps,feature_args)
+            outputs,tl = self.model(images,training=True)
+            batch_loss = self.loss_function(ground_truth,outputs)
             self.train_loss.update_state(batch_loss)
             self.batch_accuracy.update_state(ground_truth,outputs)
             self.train_accuracy.update_state(ground_truth,outputs)
@@ -79,7 +80,7 @@ class Trainer():
             rounded_predictions = tf.where(tf.greater_equal(outputs,tf.constant(0.5)),tf.ones_like(outputs),tf.zeros_like(outputs))
             self.iou.update_state(ground_truth,rounded_predictions)
             
-            
+            self.tl(tl)
 
         gradients = tape.gradient(batch_loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
@@ -95,14 +96,15 @@ class Trainer():
                 tf.summary.scalar('recall',self.batch_recall.result(),step=step)        
                 tf.summary.scalar('meanIoU',self.iou.result(),step=step)     
                 tf.summary.scalar('f1',self.f1_score(self.batch_precision.result(),self.batch_recall.result()),step=step)
+                tf.summary.scalar('tl',self.tl.result(),step=step)
                 
     #@tf.function
     def test_step(self,batch,step,file_writer=None):
         
         images, ground_truth = batch
 
-        feature_maps,feature_args,outputs  = self.model(images,training=False)
-        batch_loss = self.loss_function(ground_truth,feature_maps,feature_args)
+        outputs,_  = self.model(images,training=False)
+        batch_loss = self.loss_function(ground_truth,outputs)
         self.test_loss.update_state(batch_loss)
         self.batch_accuracy.update_state(ground_truth,outputs)
         self.test_accuracy.update_state(ground_truth,outputs)
@@ -257,6 +259,7 @@ class Trainer():
                 self.batch_precision.reset_states()
                 self.batch_recall.reset_states()
                 self.iou.reset_states()
+                self.tl.reset_states()
                 if self.strategy is None:
                     loss = self.train_step(batch,tf.constant(step,dtype=tf.int64))
                 else:
