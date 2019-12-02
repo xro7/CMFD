@@ -22,7 +22,8 @@ import tensorflow_addons as tfa
 class Trainer():
 
     def __init__(self,model,loss_function,optimizer,train_dataset,train_dataset_size,val_dataset,val_dataset_size,batch_size,epochs,max_patience=100,
-          min_epochs=-1,validation_per_epoch=1,save_by_metric='accuracy',log_dir='logs/',checkpoint_path='ckpts/',restore=False,strategy=None):
+          min_epochs=-1,validation_per_epoch=1,save_by_metric='accuracy',log_dir='logs/',checkpoint_path='ckpts/',restore=False,
+                 checkpoint_every_n_epochs=10,strategy=None):
         self.model = model
         self.loss_function = loss_function
         self.optimizer = optimizer
@@ -42,6 +43,7 @@ class Trainer():
         self.strategy = strategy
         self.define_metrics()
         self.epsilon = 1e-12
+        self.checkpoint_every_n_epochs = checkpoint_every_n_epochs
     
 
     def define_metrics(self,accuracy=tf.keras.metrics.BinaryAccuracy, loss_aggregation=tf.keras.metrics.Mean, classes=1, test_threshold=0.5):
@@ -275,22 +277,22 @@ class Trainer():
                         #print(val_accuracy)
                         validation_round+=1
                 
-                
-                        if self.save_by_metric is None:
-                            ckpt.step.assign(step)
-                            ckpt.epoch.assign(epoch)
-                            save_path = manager.save(checkpoint_number=step)
-                            print("Saved checkpoint for step {}: {}".format(step, save_path))
-                        else:
-                            #my_metric = self.f1_score(self.precision.result(),self.recall.result())
-                            my_metric = train_loss.result()
-                            if my_metric < self.metric_to_inspect:
-                                ckpt.metric.assign(my_metric)
+                        if epoch % self.checkpoint_every_n_epochs == 0:
+                            if self.save_by_metric is None:
                                 ckpt.step.assign(step)
-                                ckpt.epoch.assign(epoch)
+                                ckpt.epoch.assign(epoch+1)
                                 save_path = manager.save(checkpoint_number=step)
-                                print('Best metric score: ',my_metric,'/ previous: ',self.metric_to_inspect)
-                                print("Saved checkpoint for step {}: {}".format(step, save_path))   
+                                print("Saved checkpoint for step {}: {}".format(step, save_path))
+                            else:
+                                #my_metric = self.f1_score(self.precision.result(),self.recall.result())
+                                my_metric = train_loss.result()
+                                if my_metric < self.metric_to_inspect:
+                                    ckpt.metric.assign(my_metric)
+                                    ckpt.step.assign(step)
+                                    ckpt.epoch.assign(epoch+1)
+                                    save_path = manager.save(checkpoint_number=step)
+                                    print('Best metric score: ',my_metric,'/ previous: ',self.metric_to_inspect)
+                                    print("Saved checkpoint for step {}: {}".format(step, save_path))   
                                  
             
             

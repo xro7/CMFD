@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--image_resize', type=int, default=256)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--validation_per_epoch', type=int, default=10)
+    parser.add_argument('--checkpoint_every_n_epochs', type=int, default=10)
     parser.add_argument('--checkpoint_path', type=str, default='ckpts/')
     parser.add_argument('--distributed', default=False, action='store_true')
     
@@ -37,26 +38,20 @@ def main():
         GPU_IDS = list(map(int, ids))
     else:    
         GPU_IDS = [int(args.gpu_id)]
-    print(GPU_IDS)
-    physical_gpus = tf.config.experimental.list_physical_devices('GPU')
-    print('physical_gpus: ',physical_gpus)
-    logical_gpus = []
-    for gpu_id in GPU_IDS:
-        logical_gpus.append(physical_gpus[gpu_id])
-    print('logical_gpus: ',logical_gpus)
-    
-    if not args.distributed:
-        if logical_gpus:
-            try:
-                # Currently, memory growth needs to be the same across GPUs
-                for gpu in logical_gpus:
-                    #allow growth
-                    tf.config.experimental.set_memory_growth(gpu, True)
-                tf.config.experimental.set_visible_devices(logical_gpus, 'GPU')
-                logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-                print(len(physical_gpus), "Physical GPUs,",physical_gpus,'\n', len(logical_gpus), "Logical GPUs",logical_gpus)
-            except RuntimeError as e:
-                print(e)
+
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    print(gpus)
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            #tf.config.experimental.set_visible_devices(gpus[GPU_ID], 'GPU') # use specific cpu
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
     
     if args.distributed:
         devices=['/gpu:'+str(i) for i in GPU_IDS]
@@ -159,7 +154,8 @@ def main():
         trainer = Trainer(architecture,loss_function,optimizer,train_dataset_iter,train_dataset_size,val_dataset_iter,val_dataset_size,
               args.batch_size,args.epochs,max_patience=100,min_epochs=-1,validation_per_epoch=args.validation_per_epoch,save_by_metric=args.save_by_metric
               ,log_dir='logs/'+args.model+'/'+args.experiment+'_',
-              checkpoint_path=os.path.join(args.checkpoint_path,args.experiment,''),restore=args.restore,strategy=strategy)
+              checkpoint_path=os.path.join(args.checkpoint_path,args.experiment,''),restore=args.restore,
+                          checkpoint_every_n_epochs=args.checkpoint_every_n_epochs,strategy=strategy)
         trainer.train()
 if __name__ == "__main__":
     main()
