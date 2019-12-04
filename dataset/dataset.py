@@ -37,21 +37,31 @@ def get_image_files_from_dirs(paths,extension='jpg',sort=False):
             raise Exception(path+ 'not exists')
     return files
 
-def preprocess_image(image,image_size=[256,256],is_map=False):
-    if is_map:
+def preprocess_image(image,image_size=[256,256],is_mask=False,crop=True):
+    if is_mask:
         image = tf.image.decode_jpeg(image, channels=1)
-        image = tf.cast(image,tf.float32)
-        image = image/255.0
-        image = tf.image.resize(image, image_size,method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        #image = tf.cast(image,tf.float32)
+        #image = image/255.0
+        image = tf.image.convert_image_dtype(image, tf.float32)
+#         if crop:
+#            image = crop_image_keep_aspect_ratio(image)
+        image = tf.image.resize(image, image_size,method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,preserve_aspect_ratio=False)
     else:
         image = tf.image.decode_jpeg(image, channels=3)
-        image = tf.cast(image,tf.float32)
-        image = image/255.0
-        image = tf.image.resize(image, image_size,method=tf.image.ResizeMethod.BILINEAR)
-
-
-         
+        #image = tf.cast(image,tf.float32)
+        #image = image/255.0
+        image = tf.image.convert_image_dtype(image, tf.float32)
+#         if crop:
+#             image = crop_image_keep_aspect_ratio(image)
+        image = tf.image.resize(image, image_size,method=tf.image.ResizeMethod.BILINEAR,preserve_aspect_ratio=False)
+  
     return image
+
+
+def crop_image_keep_aspect_ratio(image):
+    h,w,c = image.shape
+    min_dim = tf.minimum(h,w)
+    return tf.crop_to_bounding_box(0,0,min_dim,min_dim)
 
 
 def read_image(path,label=None):
@@ -65,7 +75,7 @@ def load_and_preprocess_image(image_path,map_path,image_size=[256,256]):
 
     image = read_image(image_path)
     gt_map = read_image(map_path)
-    image,mask = preprocess_image(image,image_size=image_size),preprocess_image(gt_map,image_size=image_size,is_map=True)
+    image,mask = preprocess_image(image,image_size=image_size),preprocess_image(gt_map,image_size=image_size,is_mask=True)
     return image,mask
 
     
@@ -104,17 +114,19 @@ def iterator_sizes(sizes,batch_size,drop_remainder=True):
             else:
                 return sizes//batch_size
             
-def create_dataset(image_paths,mask_files,batch_size,image_size,use_cashe=True,cashe_dir='.cashed_data',extension='jpg',drop_remainder=False,sort=False,shuffle=True):
+def create_dataset(image_paths,mask_files,batch_size,image_size,use_cashe=True,cashe_dir='.cashed_data',extension='jpg',drop_remainder=False,sort=False,shuffle=True,files=False):
     
+    if not files: 
+        print('getting files from specified paths')
+        if isinstance(image_paths,str):
+            image_paths = [image_paths]
 
-    print('getting files from specified paths')
-    if isinstance(image_paths,str):
-        image_paths = [image_paths]
-    
-    image_files = get_image_files_from_dirs(image_paths,extension=extension,sort=sort)
-    print('image_files',len(image_files))
-    #image_files = [file for file in image_files if os.path.exists(file.replace('/images/', '/masks/'))]
-    mask_files = [file.replace('/images/', '/masks/')  for file in image_files]
+        image_files = get_image_files_from_dirs(image_paths,extension=extension,sort=sort)
+        print('image_files',len(image_files))
+        #image_files = [file for file in image_files if os.path.exists(file.replace('/images/', '/masks/'))]
+        mask_files = [file.replace('/images/', '/masks/')  for file in image_files]
+    else:
+        image_files = image_paths
     
     print('creating tf.Datasets')
     dataset = create_tf_dataset(image_files,mask_files,batch_size,image_size,repeat=True,shuffle=shuffle,drop_remainder=drop_remainder)

@@ -54,18 +54,28 @@ def main():
     image_size = [args.image_resize,args.image_resize]
     batch_size = args.batch_size
     dataset_root = args.dataset_root
-    test_images = os.path.join(dataset_root,'test','images','')
-    test_masks = os.path.join(dataset_root,'test','masks','')
     sort=False
     drop_remainder = False
+    
+    dataset_name = args.dataset_root.split('/')[-1]
+    if dataset_name == 'CoMoFoD_small_v2':
+        files = os.listdir(dataset_root)
+        images = [os.path.join(dataset_root,x) for x in files if '_F' in x and 'NA3' not in x]
+        masks = [os.path.join(dataset_root,x+'_B.png') for x in [x.split('/')[-1].split('_')[0] for x in images]]
 
+        test_dataset,length = create_dataset(images,masks,batch_size,image_size,extension='.jpg',drop_remainder=True,sort=sort,shuffle=True,files=True)
+        test_dataset_iter = iter(test_dataset)
+        test_dataset_size = iterator_sizes(length,batch_size,drop_remainder=True)
+        print(test_dataset_size)
+    else:
+        test_images = os.path.join(dataset_root,'test','images','')
+        test_masks = os.path.join(dataset_root,'test','masks','')
+        test_dataset,test_length = create_dataset(test_images,test_masks,args.batch_size,image_size,extension='.jpg',
+                                                        drop_remainder=drop_remainder,sort=sort,shuffle=True)
 
-    test_dataset,test_length = create_dataset(test_images,test_masks,args.batch_size,image_size,extension='.jpg',
-                                                    drop_remainder=drop_remainder,sort=sort,shuffle=True)
-
-    test_dataset_iter = iter(test_dataset)
-    test_dataset_size = iterator_sizes(test_length,batch_size,drop_remainder=drop_remainder)
-    print(test_dataset_size)
+        test_dataset_iter = iter(test_dataset)
+        test_dataset_size = iterator_sizes(test_length,batch_size,drop_remainder=drop_remainder)
+        print(test_dataset_size)
 
           
 

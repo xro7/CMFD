@@ -179,7 +179,7 @@ class Trainer():
             print('ROC_AUC: {}'.format(self.test_PR_AUC.result()))
             print('precision: {}'.format(self.precision.result()))
             print('recall: {}'.format(self.recall.result()))
-            print('f1',{}.format(self.f1_score(self.precision.result(),self.recall.result())))
+            print('f1 {}'.format(self.f1_score(self.precision.result(),self.recall.result())))
             print('meanIoU: {}'.format(self.iou.result()))
         
     def create_checkpoint_and_restore(self,net,optimizer,choose_ckpt='latest',**kwargs):

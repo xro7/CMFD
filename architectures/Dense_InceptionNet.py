@@ -124,7 +124,7 @@ class Dense_InceptionNet(Model):
         
 class Feature_Correlation_Matching(Model):
 
-    def __init__(self, Tl=0.6 ,l=3):
+    def __init__(self, Tl=0.6 ,l=2):
         super(Feature_Correlation_Matching,self).__init__()
         self.Tl = Tl
         self.l = l
